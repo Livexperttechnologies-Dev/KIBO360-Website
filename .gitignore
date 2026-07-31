@@ -1,0 +1,10 @@
+# Basic Git ignore config
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+build/
+*.log
+*.tmp
+*.env
+.vscode/
