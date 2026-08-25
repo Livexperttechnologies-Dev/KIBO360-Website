@@ -211,6 +211,8 @@ const paths = {
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
   "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-left": <path d="m14 6-6 6 6 6" />,
+  "chevron-right": <path d="m10 6 6 6-6 6" />,
 };
 
 export default function Icon({ name, size = 20, className = "", strokeWidth = 1.7 }) {

@@ -644,17 +644,51 @@ section.tight { padding: 28px 0; }
 }
 .product-actions { display: flex; gap: 12px; margin-top: auto; }
 
-/* Horizontal product scroller (Home) */
+/* Horizontal product scroller (Home) — compact cards + arrow controls */
 .product-scroller {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: min(330px, 82vw);
-  gap: 20px;
+  grid-auto-columns: min(272px, 76vw);
+  gap: 18px;
   overflow-x: auto;
-  padding: 6px 6px 16px;
+  padding: 6px 6px 14px;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
 }
+.product-scroller.compact .product-card { padding: 22px 20px; gap: 10px; border-radius: 18px; }
+.product-scroller.compact .product-avatar { width: 46px; height: 46px; font-size: 1rem; border-radius: 13px; }
+.product-scroller.compact h3 { font-size: 1.05rem; }
+.product-scroller.compact .blurb { font-size: 0.83rem; }
+.product-scroller.compact .product-highlights span { font-size: 0.7rem; padding: 3px 8px; }
+.product-scroller.compact .product-sub { font-size: 0.74rem; }
+.product-scroller.compact .btn { padding: 9px 16px; font-size: 0.82rem; }
+
+.scroller-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.scroller-arrow {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  transition: all 0.2s ease;
+}
+.scroller-arrow:hover:not(:disabled) {
+  background: var(--grad);
+  color: #fff;
+  border-color: transparent;
+  transform: translateY(-2px);
+}
+.scroller-arrow:disabled { opacity: 0.35; cursor: default; }
 .product-scroller .product-card { scroll-snap-align: start; }
 .product-scroller::-webkit-scrollbar { height: 8px; }
 .product-scroller::-webkit-scrollbar-thumb { background: rgba(108, 34, 214, 0.3); border-radius: 8px; }
@@ -768,6 +802,100 @@ section.tight { padding: 28px 0; }
   flex: none;
 }
 .workflow-arrow { color: var(--primary); font-weight: 800; }
+
+/* ----------- HMS "The Problem" panel: pain cards + damage meters ----------- */
+
+.problem-panel {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 34px;
+  background: linear-gradient(135deg, #fff8f5 0%, #fff2f7 100%);
+  border: 1px solid rgba(224, 62, 143, 0.16);
+  border-radius: 24px;
+  padding: 34px;
+}
+@media (max-width: 1000px) { .problem-panel { grid-template-columns: 1fr; padding: 24px 20px; } }
+
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  align-content: start;
+}
+@media (max-width: 560px) { .problem-grid { grid-template-columns: 1fr; } }
+
+.pain-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(224, 62, 143, 0.12);
+  border-radius: 14px;
+  padding: 14px 16px;
+  transition: all 0.25s ease;
+}
+.pain-card:hover { transform: translateY(-3px); border-color: rgba(224, 62, 143, 0.35); box-shadow: 0 12px 26px -12px rgba(224, 62, 143, 0.35); }
+.pain-icon {
+  width: 36px; height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(224, 62, 143, 0.1);
+  color: var(--secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pain-card h3 { font-size: 0.92rem; margin-bottom: 2px; }
+.pain-card p { font-size: 0.8rem; color: var(--body); line-height: 1.45; }
+
+.problem-meters {
+  background: var(--card);
+  border: 1px solid rgba(224, 62, 143, 0.14);
+  border-radius: 18px;
+  padding: 24px 24px 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.meters-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+.meter-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.meter-label { font-size: 0.84rem; font-weight: 700; color: var(--ink); }
+.meter-value {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1.05rem;
+  background: var(--grad-pink-coral);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.meter-track {
+  height: 9px;
+  border-radius: 6px;
+  background: rgba(224, 62, 143, 0.12);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  width: var(--pct);
+  border-radius: 6px;
+  background: var(--grad-pink-coral);
+  animation: meterGrow 1.1s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-play-state: paused;
+}
+.fade-section.in-view .meter-fill { animation-play-state: running; }
+@keyframes meterGrow { from { width: 0; } }
+.meters-foot { font-size: 0.84rem; font-weight: 700; color: var(--primary); margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .meter-fill { animation: none; }
+}
 
 /* ------------- HMS modules: sticky index rail + chapter cards -------------- */
 
@@ -1716,16 +1844,24 @@ section.tight { padding: 28px 0; }
 }
 .modal-card {
   position: relative;
-  width: min(660px, 100%);
-  max-height: calc(100vh - 36px); /* fallback for browsers without dvh */
-  max-height: calc(100dvh - 36px);
+  width: min(520px, 100%);
+  max-height: calc(100vh - 48px); /* fallback for browsers without dvh */
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
   background: var(--bg);
-  border-radius: 22px;
+  border-radius: 20px;
   box-shadow: 0 40px 90px -20px rgba(26, 12, 67, 0.55);
-  padding: 30px 28px 26px;
+  padding: 24px 24px 22px;
   animation: modalIn 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
+/* Compact form inside the dialog so it reads as a popup, not a full page */
+.modal-card .contact-form { gap: 12px; }
+.modal-card .contact-form label { font-size: 0.82rem; gap: 5px; }
+.modal-card .contact-form input,
+.modal-card .contact-form select { padding: 9px 12px; }
+.modal-card .contact-form textarea { padding: 9px 12px; min-height: 74px; height: 74px; }
+.modal-card .form-row { gap: 12px; }
+.modal-card .contact-form .btn-lg { padding: 12px 26px; font-size: 0.92rem; }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(26px) scale(0.96); }
 }
@@ -1745,9 +1881,10 @@ section.tight { padding: 28px 0; }
   justify-content: center;
 }
 .modal-close:hover { color: var(--secondary); border-color: var(--secondary); }
-.modal-head { padding-right: 44px; margin-bottom: 16px; }
-.modal-head h3 { font-size: 1.3rem; margin: 6px 0 4px; }
-.modal-head p { font-size: 0.9rem; }
+.modal-head { padding-right: 44px; margin-bottom: 12px; }
+.modal-head h3 { font-size: 1.12rem; margin: 6px 0 3px; }
+.modal-head p { font-size: 0.83rem; }
+.modal-head .eyebrow { font-size: 0.68rem; padding: 4px 12px; margin-bottom: 6px; }
 .modal-card .contact-form {
   background: transparent;
   border: none;

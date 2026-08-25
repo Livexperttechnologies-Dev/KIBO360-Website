@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import SectionHeading from "../components/SectionHeading.jsx";
@@ -75,6 +75,30 @@ function EcosystemOrbit() {
 export default function Home() {
   const [marqueePaused, setMarqueePaused] = useState(false);
   const { openDemo } = useDemoModal();
+
+  // Product scroller arrow controls
+  const scrollerRef = useRef(null);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(true);
+  const updateArrows = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanPrev(el.scrollLeft > 4);
+    setCanNext(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+  useEffect(() => {
+    updateArrows();
+    window.addEventListener("resize", updateArrows);
+    return () => window.removeEventListener("resize", updateArrows);
+  }, [updateArrows]);
+  const scrollByCard = (dir) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const card = el.querySelector(".product-card");
+    const step = (card ? card.getBoundingClientRect().width : 280) + 18;
+    el.scrollBy({ left: dir * step, behavior: "smooth" });
+  };
+
   return (
     <>
       <Seo
@@ -206,7 +230,27 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
             subtitle="Pick the product that fits your organization today - every KIBO360 product shares the same intelligent database, so you can add more as you grow."
           />
           {/* Horizontal scroller: live products + coming-soon cards */}
-          <div className="product-scroller" role="list">
+          <div className="scroller-controls">
+            <button
+              type="button"
+              className="scroller-arrow"
+              aria-label="Previous products"
+              disabled={!canPrev}
+              onClick={() => scrollByCard(-1)}
+            >
+              <Icon name="chevron-left" size={18} strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              className="scroller-arrow"
+              aria-label="Next products"
+              disabled={!canNext}
+              onClick={() => scrollByCard(1)}
+            >
+              <Icon name="chevron-right" size={18} strokeWidth={2.2} />
+            </button>
+          </div>
+          <div className="product-scroller compact" role="list" ref={scrollerRef} onScroll={updateArrows}>
             {products.filter((p) => p.route).map((p) => (
               <article key={p.slug} className="product-card" role="listitem">
                 <div className="product-top">

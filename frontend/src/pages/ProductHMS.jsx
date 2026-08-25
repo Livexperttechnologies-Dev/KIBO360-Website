@@ -351,7 +351,7 @@ export default function ProductHMS() {
         </div>
       </section>
 
-      {/* Challenges (deck p.3) */}
+      {/* Challenges (deck p.3) — pain cards + animated damage meters */}
       <section>
         <div className="container">
           <SectionHeading
@@ -359,18 +359,38 @@ export default function ProductHMS() {
             title="Healthcare industry challenges."
             subtitle="Legacy, paper-driven hospital workflows leak revenue and patient trust every single day."
           />
-          <div className="chip-row" style={{ marginBottom: 30 }}>
-            {hms.challenges.map((c) => (
-              <span key={c.name} className="chip danger"><Icon name={c.icon} size={15} /> {c.name}</span>
-            ))}
-          </div>
-          <div className="grid grid-4">
-            {hms.challengeStats.map((s) => (
-              <div key={s.label} className="stat-card">
-                <span className="stat-value gradient-text">{s.value}</span>
-                <span className="stat-label">{s.label}</span>
-              </div>
-            ))}
+          <div className="problem-panel">
+            <div className="problem-grid">
+              {hms.challenges.map((c) => (
+                <div key={c.name} className="pain-card">
+                  <span className="pain-icon" aria-hidden="true">
+                    <Icon name={c.icon} size={19} />
+                  </span>
+                  <div>
+                    <h3>{c.name}</h3>
+                    <p>{c.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="problem-meters">
+              <p className="meters-title">What it costs a hospital every day</p>
+              {hms.challengeStats.map((s) => (
+                <div key={s.label} className="meter">
+                  <div className="meter-head">
+                    <span className="meter-label">{s.label}</span>
+                    <span className="meter-value">{s.value}</span>
+                  </div>
+                  <div className="meter-track" aria-hidden="true">
+                    <div className="meter-fill" style={{ "--pct": `${s.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+              <p className="meters-foot">
+                KIBO360 HMS exists to claw all of this back.
+              </p>
+            </div>
           </div>
         </div>
       </section>

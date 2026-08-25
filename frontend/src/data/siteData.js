@@ -249,18 +249,19 @@ export const hms = {
   ],
 
   challenges: [
-    { icon: "file-text", name: "Manual Records" },
-    { icon: "banknote", name: "Billing Delays" },
-    { icon: "clock", name: "Long Waiting Time" },
-    { icon: "box", name: "Inventory Loss" },
-    { icon: "megaphone", name: "Poor Communication" },
-    { icon: "folders", name: "Paper-Based Workflow" },
+    { icon: "file-text", name: "Manual Records", text: "Files go missing; hours are lost searching." },
+    { icon: "banknote", name: "Billing Delays", text: "Slow invoicing that stalls cash flow." },
+    { icon: "clock", name: "Long Waiting Time", text: "Queues frustrate patients before care begins." },
+    { icon: "box", name: "Inventory Loss", text: "Expired stock and shrinkage nobody catches." },
+    { icon: "megaphone", name: "Poor Communication", text: "Departments working blind to each other." },
+    { icon: "folders", name: "Paper-Based Workflow", text: "Processes that can't scale or be audited." },
   ],
+  // pct drives the "damage meter" bar widths
   challengeStats: [
-    { value: "30%", label: "Operational Inefficiency" },
-    { value: "25%", label: "Revenue Leakage" },
-    { value: "40%", label: "Patient Dissatisfaction" },
-    { value: "50%+", label: "Time Spent on Manual Tasks" },
+    { value: "30%", pct: 30, label: "Operational Inefficiency" },
+    { value: "25%", pct: 25, label: "Revenue Leakage" },
+    { value: "40%", pct: 40, label: "Patient Dissatisfaction" },
+    { value: "50%+", pct: 52, label: "Time Spent on Manual Tasks" },
   ],
 
   solutionWheel: [
