@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import Breadcrumbs from "../components/Breadcrumbs.jsx";
 import SectionHeading from "../components/SectionHeading.jsx";
@@ -7,6 +6,7 @@ import FeatureCard from "../components/FeatureCard.jsx";
 import CTABanner from "../components/CTABanner.jsx";
 import FaqSection, { faqJsonLd } from "../components/FaqSection.jsx";
 import Icon from "../components/Icon.jsx";
+import { useDemoModal } from "../components/DemoModalContext.jsx";
 import { cms, integrations, securityFeatures, cmsFaqs, images, testimonials } from "../data/siteData.js";
 
 const cmsJsonLd = {
@@ -27,7 +27,7 @@ const cmsJsonLd = {
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: "https://kibo360.in/" },
-        { "@type": "ListItem", position: 2, name: "Products", item: "https://kibo360.in/#products" },
+        { "@type": "ListItem", position: 2, name: "Products", item: "https://kibo360.in/products" },
         { "@type": "ListItem", position: 3, name: "Clinic Management Software (CMS)" },
       ],
     },
@@ -36,6 +36,7 @@ const cmsJsonLd = {
 };
 
 export default function ProductCMS() {
+  const { openDemo } = useDemoModal();
   return (
     <>
       <Seo
@@ -48,7 +49,7 @@ export default function ProductCMS() {
         <Breadcrumbs
           items={[
             { label: "Home", to: "/" },
-            { label: "Products", to: "/#products" },
+            { label: "Products", to: "/products" },
             { label: "Clinic Management Software (CMS)" },
           ]}
         />
@@ -67,7 +68,9 @@ export default function ProductCMS() {
             </p>
             <p className="hero-text">{cms.heroText}</p>
             <div className="hero-actions">
-              <Link to="/contact" className="btn btn-primary btn-lg">Book a Demo</Link>
+              <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>
+                Book a Demo
+              </button>
               <a href="#cms-modules" className="btn btn-outline btn-lg">See Features</a>
             </div>
             <p className="hero-note">
@@ -161,7 +164,9 @@ export default function ProductCMS() {
               <li>Printable, standardized e-prescriptions.</li>
               <li>Quick-templates for repeat diagnoses.</li>
             </ul>
-            <Link to="/contact" className="btn btn-primary" style={{ marginTop: 24 }}>See a Live Demo</Link>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 24 }} onClick={openDemo}>
+              See a Live Demo
+            </button>
           </div>
           <div className="split-visual">
             <div className="img-wrapper">
@@ -289,8 +294,17 @@ export default function ProductCMS() {
                 <span className="quote-mark" aria-hidden="true">“</span>
                 <blockquote>{t.quote}</blockquote>
                 <figcaption className="test-user">
-                  <strong>{t.role}</strong>
-                  <span>{t.org}</span>
+                  {t.img ? (
+                    <img src={t.img} alt="" className="test-avatar" loading="lazy" width="96" height="96" />
+                  ) : (
+                    <span className="test-avatar initials" aria-hidden="true">
+                      {t.role.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                    </span>
+                  )}
+                  <div>
+                    <strong>{t.role}</strong>
+                    <span>{t.org}</span>
+                  </div>
                 </figcaption>
               </figure>
             ))}

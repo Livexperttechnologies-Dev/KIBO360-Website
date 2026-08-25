@@ -5,10 +5,11 @@ import SectionHeading from "../components/SectionHeading.jsx";
 import StatCard from "../components/StatCard.jsx";
 import CTABanner from "../components/CTABanner.jsx";
 import Icon from "../components/Icon.jsx";
+import { useDemoModal } from "../components/DemoModalContext.jsx";
 import {
   company, ecosystemNodes, valuePillars, aboutNarrative, platformBadges,
-  products, capabilityMatrix, platformStats, targetSectors, integrations,
-  securityGroups, testimonials, images,
+  products, upcomingProducts, capabilityMatrix, platformStats, targetSectors,
+  integrations, securityGroups, testimonials, images,
 } from "../data/siteData.js";
 
 const indiaReady = [
@@ -73,6 +74,7 @@ function EcosystemOrbit() {
 
 export default function Home() {
   const [marqueePaused, setMarqueePaused] = useState(false);
+  const { openDemo } = useDemoModal();
   return (
     <>
       <Seo
@@ -102,8 +104,10 @@ export default function Home() {
               care, faster.
             </p>
             <div className="hero-actions">
-              <Link to="/products/hms" className="btn btn-primary btn-lg">Explore Products</Link>
-              <Link to="/contact" className="btn btn-outline btn-lg">Book a Free Demo</Link>
+              <Link to="/products" className="btn btn-primary btn-lg">Explore Products</Link>
+              <button type="button" className="btn btn-outline btn-lg" onClick={openDemo}>
+                Book a Free Demo
+              </button>
             </div>
             <p className="hero-note">
              One intelligent platform. Multiple solutions.
@@ -201,12 +205,13 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
             title="One platform. A growing family of products."
             subtitle="Pick the product that fits your organization today - every KIBO360 product shares the same intelligent database, so you can add more as you grow."
           />
-          <div className="grid grid-3">
-            {products.map((p) => (
-              <article key={p.slug} className={`product-card ${p.route ? "" : "soon"}`}>
+          {/* Horizontal scroller: live products + coming-soon cards */}
+          <div className="product-scroller" role="list">
+            {products.filter((p) => p.route).map((p) => (
+              <article key={p.slug} className="product-card" role="listitem">
                 <div className="product-top">
                   <span className="product-avatar">{p.short}</span>
-                  <span className={`product-status ${p.route ? "" : "soon"}`}>{p.status}</span>
+                  <span className="product-status">{p.status}</span>
                 </div>
                 <h3>{p.name}</h3>
                 <p className="blurb">{p.blurb}</p>
@@ -216,15 +221,36 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
                 <p className="product-sub">
                   Runs at <code>{p.subdomain}</code>
                 </p>
-                {p.route && (
-                  <div className="product-actions">
-                    <Link to={p.route} className="btn btn-primary">Learn More</Link>
-                    <Link to="/contact" className="btn btn-outline">Get a Demo</Link>
-                  </div>
-                )}
+                <div className="product-actions">
+                  <Link to={p.route} className="btn btn-primary">Learn More</Link>
+                  <button type="button" className="btn btn-outline" onClick={openDemo}>
+                    Get a Demo
+                  </button>
+                </div>
+              </article>
+            ))}
+            {upcomingProducts.map((p) => (
+              <article key={p.slug} className="product-card soon" role="listitem">
+                <div className="product-top">
+                  <span className="product-avatar soon-avatar" aria-hidden="true">
+                    <Icon name={p.icon} size={24} />
+                  </span>
+                  <span className="product-status soon">Coming Soon</span>
+                </div>
+                <h3>{p.name}</h3>
+                <p className="blurb">{p.blurb}</p>
+                <p className="product-sub">
+                  Will run at <code>{p.subdomain}</code>
+                </p>
+                <div className="product-actions">
+                  <button type="button" className="btn btn-outline" onClick={openDemo}>
+                    Get Early Access
+                  </button>
+                </div>
               </article>
             ))}
           </div>
+          <p className="scroller-hint">Scroll sideways to see all products — or <Link to="/products">view the full catalog</Link>.</p>
         </div>
       </section>
 
@@ -435,8 +461,24 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
                 <span className="quote-mark" aria-hidden="true">“</span>
                 <blockquote>{t.quote}</blockquote>
                 <figcaption className="test-user">
-                  <strong>{t.role}</strong>
-                  <span>{t.org}</span>
+                  {t.img ? (
+                    <img
+                      src={t.img}
+                      alt=""
+                      className="test-avatar"
+                      loading="lazy"
+                      width="96"
+                      height="96"
+                    />
+                  ) : (
+                    <span className="test-avatar initials" aria-hidden="true">
+                      {t.role.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                    </span>
+                  )}
+                  <div>
+                    <strong>{t.role}</strong>
+                    <span>{t.org}</span>
+                  </div>
                 </figcaption>
               </figure>
             ))}

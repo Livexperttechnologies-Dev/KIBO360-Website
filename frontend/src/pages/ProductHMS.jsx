@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import Breadcrumbs from "../components/Breadcrumbs.jsx";
 import SectionHeading from "../components/SectionHeading.jsx";
@@ -7,6 +6,7 @@ import CTABanner from "../components/CTABanner.jsx";
 import FeatureTabs from "../components/FeatureTabs.jsx";
 import FaqSection, { faqJsonLd } from "../components/FaqSection.jsx";
 import Icon from "../components/Icon.jsx";
+import { useDemoModal } from "../components/DemoModalContext.jsx";
 import { hms, integrations, roadmap, hmsFaqs } from "../data/siteData.js";
 
 const hmsJsonLd = {
@@ -28,7 +28,7 @@ const hmsJsonLd = {
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: "https://kibo360.in/" },
-        { "@type": "ListItem", position: 2, name: "Products", item: "https://kibo360.in/#products" },
+        { "@type": "ListItem", position: 2, name: "Products", item: "https://kibo360.in/products" },
         { "@type": "ListItem", position: 3, name: "Hospital Management Software (HMS)" },
       ],
     },
@@ -276,22 +276,34 @@ const securityCerts = [
 ];
 
 export default function ProductHMS() {
+  const { openDemo } = useDemoModal();
   // Scrollspy: highlight the module currently in view on the sticky rail.
+  // Position-based (not IntersectionObserver) because the stacking-deck
+  // chapters pin at a fixed top and would otherwise never "re-enter" view
+  // when scrolling back up. Active = last chapter whose top crossed 35% vh.
   const [activeModule, setActiveModule] = useState(hms.modules[0].id);
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) setActiveModule(e.target.id);
-        });
-      },
-      { rootMargin: "-30% 0px -60% 0px" }
-    );
-    hms.modules.forEach((m) => {
-      const el = document.getElementById(m.id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const line = window.innerHeight * 0.35;
+        let current = hms.modules[0].id;
+        for (const m of hms.modules) {
+          const el = document.getElementById(m.id);
+          if (el && el.getBoundingClientRect().top <= line) current = m.id;
+        }
+        setActiveModule(current);
+      });
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, []);
 
   return (
@@ -306,7 +318,7 @@ export default function ProductHMS() {
         <Breadcrumbs
           items={[
             { label: "Home", to: "/" },
-            { label: "Products", to: "/#products" },
+            { label: "Products", to: "/products" },
             { label: "Hospital Management Software (HMS)" },
           ]}
         />
@@ -325,7 +337,9 @@ export default function ProductHMS() {
             </p>
             <p className="hero-text">{hms.heroText}</p>
             <div className="hero-actions">
-              <Link to="/contact" className="btn btn-primary btn-lg">Book a Free Demo</Link>
+              <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>
+                Book a Free Demo
+              </button>
               <a href="#modules" className="btn btn-outline btn-lg">Explore Modules</a>
             </div>
             <p className="hero-note">
@@ -376,9 +390,14 @@ export default function ProductHMS() {
               <li><strong>Live financial tracking:</strong> Instant visibility of daily collections, outstanding balances and department-wise revenue.</li>
               <li><strong>Departmental BI:</strong> Drill-down diagnostics for OPD queues, IPD beds, pharmacy sales and lab reports.</li>
             </ul>
-            <Link to="/contact" className="btn btn-primary" style={{ marginTop: 26 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ marginTop: 26 }}
+              onClick={openDemo}
+            >
               Configure Admin Dashboard
-            </Link>
+            </button>
           </div>
           <div className="split-visual">
             <div className="img-wrapper">
@@ -458,11 +477,6 @@ export default function ProductHMS() {
             title="Every module, in depth."
             subtitle="Eleven integrated modules, one platform. Use the index to jump anywhere — it follows you as you scroll."
           />
-          {/* Compact jump chips — shown only below desktop, where the rail hides */}
-          <nav className="module-nav" aria-label="Jump to module">
-            {hms.modules.map((m) => <a key={m.id} href={`#${m.id}`}>{m.title}</a>)}
-          </nav>
-
           <div className="modules-layout">
             <aside className="module-rail" aria-label="Module index">
               <p className="rail-title">Modules — 11</p>
@@ -477,7 +491,9 @@ export default function ProductHMS() {
                   <span>{m.title}</span>
                 </a>
               ))}
-              <Link to="/contact" className="btn btn-primary rail-cta">Book a Demo</Link>
+              <button type="button" className="btn btn-primary rail-cta" onClick={openDemo}>
+                Book a Demo
+              </button>
             </aside>
 
             <div className="modules-flow">

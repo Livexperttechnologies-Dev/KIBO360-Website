@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import Icon from "./Icon.jsx";
+import { useDemoModal } from "./DemoModalContext.jsx";
 import { products } from "../data/siteData.js";
 
 function Logo() {
@@ -20,6 +21,7 @@ function Logo() {
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  const { openDemo } = useDemoModal();
   const liveProducts = products.filter((p) => p.route);
 
   return (
@@ -49,6 +51,9 @@ export default function Navbar() {
                   <strong>{p.short}</strong> — {p.name}
                 </NavLink>
               ))}
+              <NavLink to="/products" onClick={close} className="nav-all-products">
+                View All Products →
+              </NavLink>
             </div>
           </div>
 
@@ -57,13 +62,18 @@ export default function Navbar() {
             {liveProducts.map((p) => (
               <NavLink key={p.slug} to={p.route} onClick={close}>{p.name}</NavLink>
             ))}
+            <NavLink to="/products" onClick={close}>View All Products</NavLink>
           </div>
 
           <NavLink to="/about" onClick={close}>About Us</NavLink>
           <NavLink to="/contact" onClick={close}>Contact Us</NavLink>
-          <Link to="/contact" className="btn btn-primary nav-cta" onClick={close}>
+          <button
+            type="button"
+            className="btn btn-primary nav-cta"
+            onClick={() => { close(); openDemo(); }}
+          >
             Book a Demo
-          </Link>
+          </button>
         </nav>
       </div>
     </header>

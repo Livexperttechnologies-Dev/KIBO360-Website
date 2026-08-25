@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
 import BackToTop from "./components/BackToTop.jsx";
+import { DemoModalProvider } from "./components/DemoModalContext.jsx";
 
 export default function App() {
   const { pathname } = useLocation();
@@ -14,7 +15,9 @@ export default function App() {
 
   // Subtle scroll-reveal: sections fade in as they enter the viewport.
   useEffect(() => {
-    const sections = document.querySelectorAll("main section, .module-chapter");
+    // Note: .module-chapter is deliberately NOT included — a transform
+    // transition on those sticky cards breaks their pinning in Blink.
+    const sections = document.querySelectorAll("main section");
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -34,16 +37,18 @@ export default function App() {
   }, [pathname]);
 
   return (
-    <div className="site">
-      <a href="#main-content" className="skip-link">Skip to main content</a>
-      <div className="ambient-glow glow-1" aria-hidden="true" />
-      <div className="ambient-glow glow-2" aria-hidden="true" />
-      <Navbar />
-      <main id="main-content">
-        <Outlet />
-      </main>
-      <Footer />
-      <BackToTop />
-    </div>
+    <DemoModalProvider>
+      <div className="site">
+        <a href="#main-content" className="skip-link">Skip to main content</a>
+        <div className="ambient-glow glow-1" aria-hidden="true" />
+        <div className="ambient-glow glow-2" aria-hidden="true" />
+        <Navbar />
+        <main id="main-content">
+          <Outlet />
+        </main>
+        <Footer />
+        <BackToTop />
+      </div>
+    </DemoModalProvider>
   );
 }

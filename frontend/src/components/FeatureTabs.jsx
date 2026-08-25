@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useDemoModal } from "./DemoModalContext.jsx";
 
 const INTERVAL = 6000; // ms per tab before auto-advancing
 const STEP = 100;
@@ -13,6 +13,7 @@ export default function FeatureTabs({ tabs }) {
   const [active, setActive] = useState(0);
   const [progress, setProgress] = useState(0);
   const paused = useRef(false);
+  const { openDemo } = useDemoModal();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -66,9 +67,14 @@ export default function FeatureTabs({ tabs }) {
             <ul className="tab-list">
               {tab.points.map((p) => <li key={p}>{p}</li>)}
             </ul>
-            <Link to="/contact" className="btn btn-primary" style={{ marginTop: 20 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ marginTop: 20 }}
+              onClick={openDemo}
+            >
               {tab.cta || "Book a Demo"}
-            </Link>
+            </button>
           </div>
           <div className="split-visual">
             <div className="img-wrapper">

@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
 import Icon from "./Icon.jsx";
+import { useDemoModal } from "./DemoModalContext.jsx";
 import { company } from "../data/siteData.js";
 
 /**
@@ -7,6 +7,7 @@ import { company } from "../data/siteData.js";
  * background, visually separate from the dark footer that follows it.
  */
 export default function CTABanner({ title, text }) {
+  const { openDemo } = useDemoModal();
   return (
     <section className="cta-banner">
       <div className="container">
@@ -27,7 +28,9 @@ export default function CTABanner({ title, text }) {
               <p>{text || "See KIBO360 in action — book a personalized demo for your organization."}</p>
             </div>
             <div className="cta-actions">
-              <Link to="/contact" className="btn btn-light btn-lg">Book a Demo</Link>
+              <button type="button" className="btn btn-light btn-lg" onClick={openDemo}>
+                Book a Demo
+              </button>
               <a
                 href={`tel:${company.phone.replace(/[^+\d]/g, "")}`}
                 className="btn btn-call-dark btn-lg"

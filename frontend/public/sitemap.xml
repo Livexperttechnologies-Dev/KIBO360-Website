@@ -6,6 +6,11 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://kibo360.in/products</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://kibo360.in/products/hms</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>

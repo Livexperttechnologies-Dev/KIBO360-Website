@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import App from "./App.jsx";
 import Home from "./pages/Home.jsx";
+import Products from "./pages/Products.jsx";
 import ProductHMS from "./pages/ProductHMS.jsx";
 import ProductCMS from "./pages/ProductCMS.jsx";
 import About from "./pages/About.jsx";
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Home /> },
+      { path: "products", element: <Products /> },
       { path: "products/hms", element: <ProductHMS /> },
       { path: "products/cms", element: <ProductCMS /> },
       // HIS is another name for HMS — keep both URLs working.

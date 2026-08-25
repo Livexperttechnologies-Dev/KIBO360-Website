@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import Icon from "./Icon.jsx";
-import { company, products } from "../data/siteData.js";
+import { company, products, upcomingProducts } from "../data/siteData.js";
 
 export default function Footer() {
   return (
@@ -26,10 +26,12 @@ export default function Footer() {
                 <Link to={p.route}>{p.name}</Link>
               </li>
             ))}
-            <li><span className="footer-muted">Inventory — coming soon</span></li>
-            <li><span className="footer-muted">Finance — coming soon</span></li>
-            <li><span className="footer-muted">LIS — coming soon</span></li>
-            <li><span className="footer-muted">CRM — coming soon</span></li>
+            {upcomingProducts.map((p) => (
+              <li key={p.slug}>
+                <span className="footer-muted">{p.name} — coming soon</span>
+              </li>
+            ))}
+            <li><Link to="/products">View All Products</Link></li>
           </ul>
         </div>
 

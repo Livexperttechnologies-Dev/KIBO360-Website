@@ -87,8 +87,44 @@ export const products = [
     subdomain: "*.kibo360.in",
     route: null,
     blurb:
-      "LIMS for diagnostics chains, Medical College ERP, and more — every new product plugs into the same KIBO360 ecosystem and shared intelligent database.",
-    highlights: ["Diagnostics Chain Suite", "Medical College ERP", "Smart Hospital IoT", "AI Agents"],
+      "Inventory, Finance ERP, LIS and CRM are on the way — every new product plugs into the same KIBO360 ecosystem and shared intelligent database.",
+    highlights: ["Inventory", "Finance", "LIS", "CRM"],
+  },
+];
+
+// Upcoming standalone products (shown on /products and in the footer)
+export const upcomingProducts = [
+  {
+    slug: "inventory",
+    name: "Inventory",
+    icon: "box",
+    subdomain: "inventory.kibo360.in",
+    blurb:
+      "Standalone inventory & stores management — stock, batch and expiry tracking, reorder automation, vendors and asset registers for any healthcare facility.",
+  },
+  {
+    slug: "finance",
+    name: "Finance",
+    icon: "banknote",
+    subdomain: "finance.kibo360.in",
+    blurb:
+      "Full finance & accounts ERP — general ledger, AP/AR, cash & bank, GST compliance, cost centers and live financial statements.",
+  },
+  {
+    slug: "lis",
+    name: "LIS",
+    icon: "flask",
+    subdomain: "lis.kibo360.in",
+    blurb:
+      "Laboratory Information System for diagnostic labs and chains — sample lifecycle, instrument integration, NABH / ISO 15189-ready QC and reporting.",
+  },
+  {
+    slug: "crm",
+    name: "CRM",
+    icon: "heart",
+    subdomain: "crm.kibo360.in",
+    blurb:
+      "Healthcare CRM — enquiries and lead pipelines, patient follow-up journeys, WhatsApp/SMS campaigns and feedback that grows your ratings.",
   },
 ];
 
@@ -515,24 +551,29 @@ export const cms = {
 // permissioned customer quotes before production launch.
 // ---------------------------------------------------------------------------
 
+// `img` is optional — add a photo URL (or /team/name.jpg in public/) to show
+// the reviewer's picture; leave null to show an initials avatar instead.
 export const testimonials = [
   {
     quote:
       "Claim reconciliations that took our billing team hours now close in minutes, and the ward team finally sees live bed status instead of calling the front desk.",
     role: "Medical Director",
     org: "200-bed multi-specialty hospital, NCR",
+    img: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=200&q=80",
   },
   {
     quote:
       "We started with just OPD and pharmacy, then switched on lab and payroll without any data migration. That modularity is why we chose KIBO360.",
     role: "Chief Operations Officer",
     org: "Regional hospital group, 3 locations",
+    img: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=200&q=80",
   },
   {
     quote:
       "WhatsApp reminders alone cut our no-shows dramatically. Patients get reports on their phone and stopped queuing at the records counter.",
     role: "Clinic Owner",
     org: "Polyclinic chain, Uttar Pradesh",
+    img: null,
   },
 ];
 
