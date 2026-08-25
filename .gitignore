@@ -8,3 +8,4 @@ build/
 *.tmp
 *.env
 .vscode/
+.claude/
