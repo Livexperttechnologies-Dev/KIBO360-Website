@@ -1,14 +1,14 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import SectionHeading from "../components/SectionHeading.jsx";
 import StatCard from "../components/StatCard.jsx";
-import FeatureCard from "../components/FeatureCard.jsx";
 import CTABanner from "../components/CTABanner.jsx";
 import Icon from "../components/Icon.jsx";
 import {
   company, ecosystemNodes, valuePillars, aboutNarrative, platformBadges,
   products, capabilityMatrix, platformStats, targetSectors, integrations,
-  securityFeatures, testimonials, images,
+  securityGroups, testimonials, images,
 } from "../data/siteData.js";
 
 const indiaReady = [
@@ -39,21 +39,29 @@ const homeJsonLd = {
 };
 
 function EcosystemOrbit() {
+  const step = 360 / ecosystemNodes.length;
   return (
     <div>
+      {/* Animated ecosystem wheel: chips pop in one by one, then revolve
+          around the KIBO360 logo. Hover pauses; reduced-motion disables. */}
       <div className="orbit" aria-hidden="true">
         <div className="orbit-ring" />
-        {ecosystemNodes.map((node, i) => (
-          <div
-            key={node}
-            className="orbit-node"
-            style={{ "--a": `${(360 / ecosystemNodes.length) * i - 90}deg` }}
-          >
-            {node}
-          </div>
-        ))}
+        <div className="orbit-ring inner" />
+        <div className="orbit-rotator">
+          {ecosystemNodes.map((node, i) => (
+            <div
+              key={node}
+              className="orbit-node"
+              style={{ "--a": `${step * i - 90}deg` }}
+            >
+              <div className="orbit-chip" style={{ "--d": `${0.3 + i * 0.13}s` }}>
+                {node}
+              </div>
+            </div>
+          ))}
+        </div>
         <div className="orbit-center">
-          <img src="/kibo360-logo.png" alt="KIBO360" className="orbit-logo" width="330" height="136" />
+          <img src="/kibo360-logo.png" alt="KIBO360" className="orbit-logo" width="331" height="135" />
         </div>
       </div>
       <div className="orbit-fallback">
@@ -64,6 +72,7 @@ function EcosystemOrbit() {
 }
 
 export default function Home() {
+  const [marqueePaused, setMarqueePaused] = useState(false);
   return (
     <>
       <Seo
@@ -106,12 +115,22 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         </div>
       </section>
 
-      {/* 2 - Trust strip (brochure badges) */}
+      {/* 2 - Trust strip (brochure badges, compact glass bar) */}
       <section className="tight">
-        <div className="container grid grid-6">
-          {platformBadges.map((b) => (
-            <FeatureCard key={b.title} icon={b.icon} title={b.title} text={b.text} />
-          ))}
+        <div className="container">
+          <div className="trust-bar">
+            {platformBadges.map((b) => (
+              <div key={b.title} className="trust-item">
+                <span className="trust-icon" aria-hidden="true">
+                  <Icon name={b.icon} size={19} />
+                </span>
+                <div>
+                  <strong>{b.title}</strong>
+                  <span>{b.text}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -150,10 +169,27 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
 
       {/* 4 - Six value pillars (deck p.2 bottom row) */}
       <section className="tight">
-        <div className="container grid grid-3">
-          {valuePillars.map((v) => (
-            <FeatureCard key={v.title} icon={v.icon} title={v.title} text={v.text} />
-          ))}
+        <div className="container">
+          <SectionHeading
+            eyebrow="Why KIBO360"
+            title="Six principles behind the platform."
+          />
+          <div className="grid grid-3">
+            {valuePillars.map((v, i) => (
+              <div key={v.title} className="pillar-card">
+                <div className="pillar-top">
+                  <span className="icon-badge" aria-hidden="true">
+                    <Icon name={v.icon} size={24} />
+                  </span>
+                  <span className="pillar-num" aria-hidden="true">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                </div>
+                <h3>{v.title}</h3>
+                <p>{v.text}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -270,43 +306,117 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         </div>
       </section>
 
-      {/* 8 - Target sectors */}
+      {/* 8 - Target sectors (photo tiles) */}
       <section>
         <div className="container">
           <SectionHeading eyebrow="Who it's for" title="Built for every care setting." />
-          <div className="grid grid-5">
+          <div className="grid grid-5 sector-photos">
             {targetSectors.map((s) => (
-              <div key={s.name} className="sector-tile">
-                <span className="s-icon" aria-hidden="true"><Icon name={s.icon} size={30} /></span>
-                {s.name}
-              </div>
+              <figure key={s.name} className="sector-photo">
+                {/* alt is empty: the visible figcaption below carries the name */}
+                <img src={s.img} alt="" loading="lazy" width="700" height="875" />
+                <figcaption>
+                  <span className="sector-photo-icon" aria-hidden="true">
+                    <Icon name={s.icon} size={17} />
+                  </span>
+                  {s.name}
+                </figcaption>
+              </figure>
             ))}
           </div>
         </div>
       </section>
 
-      {/* 9 - Integrations */}
+      {/* 9 - Integrations (auto-scrolling marquee) */}
       <section className="tight">
         <div className="container">
           <SectionHeading
             eyebrow="Integrations"
             title="Connects with everything you already use."
           />
-          <div className="chip-row">
-            {integrations.map((i) => <span key={i} className="chip">{i}</span>)}
+        </div>
+        <div
+          className={`marquee ${marqueePaused ? "paused" : ""}`}
+          aria-label="KIBO360 integrations"
+        >
+          <div className="marquee-track">
+            {[...integrations, ...integrations].map((item, idx) => (
+              <span key={`${item}-${idx}`} className="chip" aria-hidden={idx >= integrations.length}>
+                {item}
+              </span>
+            ))}
           </div>
+        </div>
+        {/* Accessible pause control (WCAG 2.2.2) for the auto-scrolling strip */}
+        <div className="container" style={{ textAlign: "center" }}>
+          <button
+            type="button"
+            className="marquee-pause"
+            aria-pressed={marqueePaused}
+            onClick={() => setMarqueePaused((p) => !p)}
+          >
+            {marqueePaused ? "▶ Play animation" : "❚❚ Pause animation"}
+          </button>
         </div>
       </section>
 
-      {/* 10 - Security */}
-      <section className="tight">
+      {/* 10 - Security & Compliance (defense-in-depth hub) */}
+      <section>
         <div className="container">
           <SectionHeading
             eyebrow="Security & Compliance"
             title="Built to protect. Designed to comply."
+            subtitle="Defense in depth for patient data — Indian compliance standards on the outside, bank-grade controls at the core."
           />
-          <div className="chip-row">
-            {securityFeatures.map((s) => <span key={s} className="chip lock"><Icon name="lock" size={14} /> {s}</span>)}
+          <div className="security-hub">
+            <div className="security-hub-col left">
+              {securityGroups.slice(0, 2).map((g) => (
+                <article key={g.key} className="sec-group">
+                  <div className="sec-group-head">
+                    <span className={`sec-group-icon ${g.tone}`} aria-hidden="true">
+                      <Icon name={g.icon} size={18} />
+                    </span>
+                    <h3>{g.label}</h3>
+                  </div>
+                  <ul>
+                    {g.items.map((item) => (
+                      <li key={item}><Icon name="check" size={13} strokeWidth={2.4} /> {item}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+
+            <div className="security-core">
+              <div className="core-visual" aria-hidden="true">
+                <span className="core-ring" />
+                <span className="core-ring r2" />
+                <span className="core-ring r3" />
+                <div className="core-emblem">
+                  <Icon name="shield" size={44} strokeWidth={1.5} />
+                </div>
+              </div>
+              <p className="core-title">Secure by Design</p>
+              <p className="core-sub">Bank-grade protection at the core of every module</p>
+            </div>
+
+            <div className="security-hub-col right">
+              {securityGroups.slice(2).map((g) => (
+                <article key={g.key} className="sec-group">
+                  <div className="sec-group-head">
+                    <span className={`sec-group-icon ${g.tone}`} aria-hidden="true">
+                      <Icon name={g.icon} size={18} />
+                    </span>
+                    <h3>{g.label}</h3>
+                  </div>
+                  <ul>
+                    {g.items.map((item) => (
+                      <li key={item}><Icon name="check" size={13} strokeWidth={2.4} /> {item}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
       </section>

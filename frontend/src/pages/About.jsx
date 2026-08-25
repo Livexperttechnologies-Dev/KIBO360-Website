@@ -19,7 +19,7 @@ export default function About() {
   return (
     <>
       <Seo
-        title="About Us — The Team Behind the KIBO360 Healthcare Platform"
+        title="About Us — The Team Behind the KIBO360 Platform"
         description="KIBO360 by Livexpert Technologies is a connected digital ecosystem for hospitals, clinics, diagnostic chains and medical colleges — built on the belief that technology should bring teams, processes and information together."
         path="/about"
         jsonLd={aboutJsonLd}

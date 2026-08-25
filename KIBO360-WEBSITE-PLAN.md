@@ -141,6 +141,14 @@ replace those two files (keep the same names) — no code change needed.
   occupancy chart (HMS hero), auto-rotating 4-tab showcase with progress bars (HMS),
   image sections with glass chart overlays (HMS only), dark navy security card with
   coral cert titles, workflow pipeline with gradient step numbers.
+- **Home motion & layout upgrades:** the hero ecosystem wheel is animated — chips pop in
+  staggered, then revolve around the KIBO360 logo (labels stay upright via
+  counter-rotation; hover pauses on pointer devices; reduced-motion disables; a
+  screen-reader-only list mirrors the labels). Trust badges are a compact glass bar,
+  value pillars are numbered cards, target sectors are photo tiles, and integrations
+  scroll as a marquee with an accessible pause button (WCAG 2.2.2). The final CTA is a
+  floating brand-gradient card (with navy contrast scrim and white focus outlines) on the
+  light background so it reads separately from the dark footer.
 
 ---
 

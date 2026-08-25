@@ -1,8 +1,8 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import Breadcrumbs from "../components/Breadcrumbs.jsx";
 import SectionHeading from "../components/SectionHeading.jsx";
-import StatCard from "../components/StatCard.jsx";
 import CTABanner from "../components/CTABanner.jsx";
 import FeatureTabs from "../components/FeatureTabs.jsx";
 import FaqSection, { faqJsonLd } from "../components/FaqSection.jsx";
@@ -36,48 +36,69 @@ const hmsJsonLd = {
   ],
 };
 
-function Workflow({ steps }) {
+/* One module rendered as a magazine-style "chapter": accent icon + ghost
+   number, feature tag pills, a vertical workflow timeline and a stat strip. */
+const CHAPTER_TONES = ["violet", "pink", "coral"];
+
+function ModuleChapter({ mod, index }) {
+  const tone = CHAPTER_TONES[index % CHAPTER_TONES.length];
   return (
-    <div className="workflow">
-      {steps.map((s, i) => (
-        <div key={s} style={{ display: "contents" }}>
-          <span className="workflow-step">
-            <span className="workflow-num">{i + 1}</span>
-            {s}
-          </span>
-          {i < steps.length - 1 && <span className="workflow-arrow">→</span>}
+    <article className="module-chapter" id={mod.id}>
+      <span className="chapter-num" aria-hidden="true">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+
+      <header className="chapter-head">
+        <span className={`chapter-icon ${tone}`} aria-hidden="true">
+          <Icon name={mod.icon} size={22} />
+        </span>
+        <div>
+          <h3>{mod.title}</h3>
+          <p className="chapter-tagline">{mod.tagline}</p>
         </div>
-      ))}
-    </div>
-  );
-}
+      </header>
 
-function ModuleBlock({ mod }) {
-  return (
-    <article className="module-block" id={mod.id}>
-      <h3 className="module-title gradient-text">{mod.title}</h3>
-      <p className="module-tagline">{mod.tagline}</p>
+      <div className="chapter-grid">
+        <div>
+          <p className="chapter-label">Key Features</p>
+          <div className="ftags">
+            {mod.features.map((f) => (
+              <span key={f} className="ftag">
+                <Icon name="check" size={12} strokeWidth={2.6} /> {f}
+              </span>
+            ))}
+          </div>
+          {mod.extra && (
+            <div className="chapter-extra">
+              <h4>{mod.extra.heading}</h4>
+              <ul>
+                {mod.extra.items.map((i) => <li key={i}>{i}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
 
-      <p className="module-section-label">Key Features</p>
-      <ul className="checklist">
-        {mod.features.map((f) => <li key={f}>{f}</li>)}
-      </ul>
-
-      <p className="module-section-label">Workflow</p>
-      <Workflow steps={mod.workflow} />
-
-      <div className="module-stats">
-        {mod.stats.map((s) => <StatCard key={s.label} {...s} />)}
+        <div>
+          <p className="chapter-label">Workflow</p>
+          <ol className="vtimeline">
+            {mod.workflow.map((s, i) => (
+              <li key={s} className="vt-step">
+                <span className={`vt-num ${tone}`} aria-hidden="true">{i + 1}</span>
+                {s}
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
 
-      {mod.extra && (
-        <div className="module-extra">
-          <h4>{mod.extra.heading}</h4>
-          <ul>
-            {mod.extra.items.map((i) => <li key={i}>{i}</li>)}
-          </ul>
-        </div>
-      )}
+      <div className="stat-strip">
+        {mod.stats.map((s) => (
+          <div key={s.label}>
+            <span className="stat-value gradient-text">{s.value}</span>
+            <span className="stat-label">{s.label}</span>
+          </div>
+        ))}
+      </div>
     </article>
   );
 }
@@ -255,6 +276,24 @@ const securityCerts = [
 ];
 
 export default function ProductHMS() {
+  // Scrollspy: highlight the module currently in view on the sticky rail.
+  const [activeModule, setActiveModule] = useState(hms.modules[0].id);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) setActiveModule(e.target.id);
+        });
+      },
+      { rootMargin: "-30% 0px -60% 0px" }
+    );
+    hms.modules.forEach((m) => {
+      const el = document.getElementById(m.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <>
       <Seo
@@ -411,17 +450,42 @@ export default function ProductHMS() {
         </div>
       </section>
 
-      {/* Module deep-dives (deck p.5–38) */}
+      {/* Module deep-dives (deck p.5–38): sticky index rail + chapters */}
       <section id="modules">
         <div className="container">
           <SectionHeading
             eyebrow="Inside the Product"
             title="Every module, in depth."
+            subtitle="Eleven integrated modules, one platform. Use the index to jump anywhere — it follows you as you scroll."
           />
+          {/* Compact jump chips — shown only below desktop, where the rail hides */}
           <nav className="module-nav" aria-label="Jump to module">
             {hms.modules.map((m) => <a key={m.id} href={`#${m.id}`}>{m.title}</a>)}
           </nav>
-          {hms.modules.map((m) => <ModuleBlock key={m.id} mod={m} />)}
+
+          <div className="modules-layout">
+            <aside className="module-rail" aria-label="Module index">
+              <p className="rail-title">Modules — 11</p>
+              {hms.modules.map((m, i) => (
+                <a
+                  key={m.id}
+                  href={`#${m.id}`}
+                  className={`rail-item ${activeModule === m.id ? "active" : ""}`}
+                  aria-current={activeModule === m.id ? "true" : undefined}
+                >
+                  <span className="rail-num">{String(i + 1).padStart(2, "0")}</span>
+                  <span>{m.title}</span>
+                </a>
+              ))}
+              <Link to="/contact" className="btn btn-primary rail-cta">Book a Demo</Link>
+            </aside>
+
+            <div className="modules-flow">
+              {hms.modules.map((m, i) => (
+                <ModuleChapter key={m.id} mod={m} index={i} />
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 

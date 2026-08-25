@@ -130,12 +130,13 @@ export const platformStats = [
 ];
 
 // Brochure — target sectors
+// img: photo tiles used on the Home "who it's for" section
 export const targetSectors = [
-  { icon: "hospital", name: "Hospitals" },
-  { icon: "buildings", name: "Multi-Specialty Groups" },
-  { icon: "flask", name: "Diagnostic Chains" },
-  { icon: "cap", name: "Medical Colleges" },
-  { icon: "stethoscope", name: "Clinics" },
+  { icon: "hospital", name: "Hospitals", img: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=700&q=80" },
+  { icon: "buildings", name: "Multi-Specialty Groups", img: "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&w=700&q=80" },
+  { icon: "flask", name: "Diagnostic Chains", img: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=700&q=80" },
+  { icon: "cap", name: "Medical Colleges", img: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=700&q=80" },
+  { icon: "stethoscope", name: "Clinics", img: "https://images.unsplash.com/photo-1638202993928-7267aad84c31?auto=format&fit=crop&w=700&q=80" },
 ];
 
 // Deck p.39 — integrations (India-first)
@@ -148,6 +149,38 @@ export const integrations = [
 export const securityFeatures = [
   "ABDM & ABHA Ready", "DPDP Act 2023 Aligned", "NABH-Aligned Workflows", "Role-Based Access",
   "AES-256 Encryption", "Two-Factor Authentication", "Audit Logs", "Backups & Disaster Recovery",
+];
+
+// Same data grouped for the Home "security hub" layout
+export const securityGroups = [
+  {
+    key: "compliance",
+    label: "India Compliance",
+    icon: "shield",
+    tone: "violet",
+    items: ["ABDM & ABHA Ready", "DPDP Act 2023 Aligned", "NABH-Aligned Workflows"],
+  },
+  {
+    key: "access",
+    label: "Access Control",
+    icon: "users",
+    tone: "pink",
+    items: ["Role-Based Access", "Two-Factor Authentication"],
+  },
+  {
+    key: "data",
+    label: "Data Protection",
+    icon: "lock",
+    tone: "coral",
+    items: ["AES-256 Encryption", "Audit Logs"],
+  },
+  {
+    key: "resilience",
+    label: "Resilience",
+    icon: "cloud",
+    tone: "navy",
+    items: ["Backups & Disaster Recovery", "Cloud-Native Uptime"],
+  },
 ];
 
 // Deck p.42 — roadmap
@@ -203,6 +236,7 @@ export const hms = {
   modules: [
     {
       id: "patient-access",
+      icon: "users",
       title: "Patient Access",
       tagline: "Seamless Patient Journey. Better Experience. Better Care.",
       features: [
@@ -225,6 +259,7 @@ export const hms = {
     },
     {
       id: "hospital-operations",
+      icon: "hospital",
       title: "Hospital Operations",
       tagline: "Intelligent Hospital Workflows. Better Care. Better Outcomes.",
       features: [
@@ -244,6 +279,7 @@ export const hms = {
     },
     {
       id: "diagnostics-pharmacy",
+      icon: "flask",
       title: "Diagnostics & Pharmacy",
       tagline: "Accurate. Integrated. Efficient.",
       features: [
@@ -266,6 +302,7 @@ export const hms = {
     },
     {
       id: "finance-erp",
+      icon: "banknote",
       title: "Finance & Accounts (ERP)",
       tagline: "Gain Complete Financial Control with Real-Time Insights.",
       features: [
@@ -283,6 +320,7 @@ export const hms = {
     },
     {
       id: "hr-payroll",
+      icon: "calendar",
       title: "HR & Payroll",
       tagline: "Smart HR & Seamless Payroll Management.",
       features: [
@@ -301,6 +339,7 @@ export const hms = {
     },
     {
       id: "procurement",
+      icon: "box",
       title: "Procurement & Purchase",
       tagline: "Smart Procurement for Faster, Cost-Effective Purchasing.",
       features: [
@@ -318,6 +357,7 @@ export const hms = {
     },
     {
       id: "asset-management",
+      icon: "layers",
       title: "Asset Management",
       tagline: "Track, Maintain, and Maximize Every Asset.",
       features: [
@@ -335,6 +375,7 @@ export const hms = {
     },
     {
       id: "revenue-cycle",
+      icon: "trending-up",
       title: "Revenue Cycle & Reporting",
       tagline: "Drive Revenue. Ensure Compliance. Make Smarter Decisions.",
       features: [
@@ -355,6 +396,7 @@ export const hms = {
     },
     {
       id: "ai-features",
+      icon: "cpu",
       title: "AI Features",
       tagline: "Smarter Healthcare. Personalized for Every Patient.",
       features: [
@@ -375,6 +417,7 @@ export const hms = {
     },
     {
       id: "ambulance",
+      icon: "map-pin",
       title: "Ambulance Management",
       tagline: "Emergency Response, Tracked in Real Time.",
       features: [
@@ -392,6 +435,7 @@ export const hms = {
     },
     {
       id: "mobile-app",
+      icon: "smartphone",
       title: "Patient Mobile App",
       tagline: "Healthcare at Your Fingertips.",
       features: [

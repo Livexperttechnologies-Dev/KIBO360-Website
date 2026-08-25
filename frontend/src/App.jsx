@@ -14,7 +14,7 @@ export default function App() {
 
   // Subtle scroll-reveal: sections fade in as they enter the viewport.
   useEffect(() => {
-    const sections = document.querySelectorAll("main section, .module-block");
+    const sections = document.querySelectorAll("main section, .module-chapter");
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
