@@ -11,3 +11,5 @@ build/
 .claude/
 *.docx
 KIBO360-WEBSITE-PLAN.md
+/*.png
+backend/data/

@@ -52,8 +52,8 @@ export default function Contact() {
   return (
     <>
       <Seo
-        title="Contact Us — Book a Free Demo of KIBO360 HMS or CMS"
-        description="Book a free demo of KIBO360 Hospital or Clinic Management Software. Call +91-800 800 5672, email info@livexperttechnologies.com, or send us a message — we respond within one business day."
+        title="Contact Us - Book a Free Demo of KIBO360 HMS or CMS"
+        description="Book a free demo of KIBO360 Hospital or Clinic Management Software. Call +91-800 800 5672, email info@livexperttechnologies.com, or send us a message - we respond within one business day."
         path="/contact"
         jsonLd={contactJsonLd}
       />
@@ -64,7 +64,7 @@ export default function Contact() {
             Let&apos;s build your <span className="gradient-text">digital hospital.</span>
           </h1>
           <p className="section-subtitle" style={{ margin: "0 auto" }}>
-            Book a demo, ask about pricing, or just say hello — we respond within one
+            Book a demo, ask about pricing, or just say hello - we respond within one
             business day.
           </p>
         </div>

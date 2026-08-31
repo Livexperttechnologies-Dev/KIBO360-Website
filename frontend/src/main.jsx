@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import App from "./App.jsx";
 import Home from "./pages/Home.jsx";
+import Admin from "./pages/Admin.jsx";
 import Products from "./pages/Products.jsx";
 import ProductHMS from "./pages/ProductHMS.jsx";
 import ProductCMS from "./pages/ProductCMS.jsx";
@@ -13,6 +14,8 @@ import Terms from "./pages/Terms.jsx";
 import "./styles/global.css";
 
 const router = createBrowserRouter([
+  // Admin console: standalone, outside the public site layout
+  { path: "/admin", element: <Admin /> },
   {
     path: "/",
     element: <App />,
@@ -21,7 +24,7 @@ const router = createBrowserRouter([
       { path: "products", element: <Products /> },
       { path: "products/hms", element: <ProductHMS /> },
       { path: "products/cms", element: <ProductCMS /> },
-      // HIS is another name for HMS — keep both URLs working.
+      // HIS is another name for HMS - keep both URLs working.
       { path: "his", element: <Navigate to="/products/hms" replace /> },
       { path: "hms", element: <Navigate to="/products/hms" replace /> },
       { path: "cms", element: <Navigate to="/products/cms" replace /> },

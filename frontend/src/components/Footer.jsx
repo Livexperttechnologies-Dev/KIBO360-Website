@@ -9,7 +9,7 @@ export default function Footer() {
         <div className="footer-brand">
           <img
             src="/kibo360-logo-white.png"
-            alt="KIBO360 — One Platform. Every Business."
+            alt="KIBO360 - One Platform. Every Business."
             className="footer-logo-img"
             width="330"
             height="136"
@@ -28,7 +28,7 @@ export default function Footer() {
             ))}
             {upcomingProducts.map((p) => (
               <li key={p.slug}>
-                <span className="footer-muted">{p.name} — coming soon</span>
+                <span className="footer-muted">{p.name} - coming soon</span>
               </li>
             ))}
             <li><Link to="/products">View All Products</Link></li>

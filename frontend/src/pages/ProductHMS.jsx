@@ -15,7 +15,7 @@ const hmsJsonLd = {
     {
       "@type": "SoftwareApplication",
       name: "KIBO360 Hospital Management Software (HMS)",
-      alternateName: "KIBO360 HIS — Hospital Information System",
+      alternateName: "KIBO360 HIS - Hospital Information System",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iOS, Android",
       url: "https://kibo360.in/products/hms",
@@ -103,7 +103,7 @@ function ModuleChapter({ mod, index }) {
   );
 }
 
-/* Glass dashboard mock — reference-page style with sparkline + radial chart */
+/* Glass dashboard mock - reference-page style with sparkline + radial chart */
 function HeroDashboard() {
   return (
     <div className="mini-dash" aria-label="KIBO360 HMS dashboard preview">
@@ -181,7 +181,7 @@ function HeroDashboard() {
   );
 }
 
-/* 4-tab auto-rotating showcase — images on HMS page only */
+/* 4-tab auto-rotating showcase - images on HMS page only */
 const featureTabs = [
   {
     label: "Patient Access",
@@ -201,15 +201,15 @@ const featureTabs = [
           <strong>Consultation Bookings</strong>
           <span className="pill green">Auto-Sync</span>
         </div>
-        <div className="overlay-item-flex"><span>10:00 AM · Dr. Sanchita Sharma — Pediatrics</span> <span className="lbl-good">Confirmed</span></div>
-        <div className="overlay-item-flex"><span>10:30 AM · Dr. Neelesh Kapoor — Gen. Medicine</span> <span className="lbl-busy">In-Queue</span></div>
+        <div className="overlay-item-flex"><span>10:00 AM · Dr. Sanchita Sharma - Pediatrics</span> <span className="lbl-good">Confirmed</span></div>
+        <div className="overlay-item-flex"><span>10:30 AM · Dr. Neelesh Kapoor - Gen. Medicine</span> <span className="lbl-busy">In-Queue</span></div>
       </>
     ),
   },
   {
     label: "Digital Prescription",
     title: "E-Prescriptions Optimized for Direct Clinical Workflow",
-    text: "Generate highly readable, standardized digital prescriptions in seconds — synced with the patient timeline, pharmacy and lab billing modules in real time.",
+    text: "Generate highly readable, standardized digital prescriptions in seconds - synced with the patient timeline, pharmacy and lab billing modules in real time.",
     points: [
       "Custom quick-templates for recurring diagnostics.",
       "Direct sync with pharmacy dispensing and lab orders.",
@@ -220,9 +220,9 @@ const featureTabs = [
     alt: "E-prescription system interface",
     overlay: (
       <>
-        <div className="overlay-header"><span className="ohl"><Icon name="pill" size={16} /> Rx — Prescribed Treatment</span></div>
-        <div className="overlay-item">Paracetamol 650mg — Post Meals — 3 Days</div>
-        <div className="overlay-item">Amoxicillin 500mg — Twice Daily — 5 Days</div>
+        <div className="overlay-header"><span className="ohl"><Icon name="pill" size={16} /> Rx - Prescribed Treatment</span></div>
+        <div className="overlay-item">Paracetamol 650mg - Post Meals - 3 Days</div>
+        <div className="overlay-item">Amoxicillin 500mg - Twice Daily - 5 Days</div>
       </>
     ),
   },
@@ -309,7 +309,7 @@ export default function ProductHMS() {
   return (
     <>
       <Seo
-        title="Hospital Management Software (HMS / HIS) — AI-Powered & Cloud-Native"
+        title="Hospital Management Software (HMS / HIS) - AI-Powered & Cloud-Native"
         description="KIBO360 HMS unifies OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance ERP, HR & payroll and AI analytics on one intelligent database. 80% faster registration, 98% billing accuracy. Book a free demo."
         path="/products/hms"
         jsonLd={hmsJsonLd}
@@ -351,7 +351,7 @@ export default function ProductHMS() {
         </div>
       </section>
 
-      {/* Challenges (deck p.3) — pain cards + animated damage meters */}
+      {/* Challenges (deck p.3) - pain cards + animated damage meters */}
       <section>
         <div className="container">
           <SectionHeading
@@ -470,7 +470,7 @@ export default function ProductHMS() {
           <SectionHeading
             eyebrow="All-In-One"
             title="The enterprise hospital OS."
-            subtitle="Explore specialized clinical and administrative workflows — the tabs rotate automatically, or click to jump."
+            subtitle="Explore specialized clinical and administrative workflows - the tabs rotate automatically, or click to jump."
           />
           <FeatureTabs tabs={featureTabs} />
         </div>
@@ -481,7 +481,7 @@ export default function ProductHMS() {
         <div className="container">
           <SectionHeading
             title="HMS Solution Overview"
-            subtitle="Nine integrated module families on one platform — one patient record, one billing engine, one source of truth."
+            subtitle="Nine integrated module families on one platform - one patient record, one billing engine, one source of truth."
           />
           <div className="chip-row">
             {hms.solutionWheel.map((m) => <span key={m} className="chip">{m}</span>)}
@@ -495,11 +495,11 @@ export default function ProductHMS() {
           <SectionHeading
             eyebrow="Inside the Product"
             title="Every module, in depth."
-            subtitle="Eleven integrated modules, one platform. Use the index to jump anywhere — it follows you as you scroll."
+            subtitle="Eleven integrated modules, one platform. Use the index to jump anywhere - it follows you as you scroll."
           />
           <div className="modules-layout">
             <aside className="module-rail" aria-label="Module index">
-              <p className="rail-title">Modules — 11</p>
+              <p className="rail-title">Modules - 11</p>
               {hms.modules.map((m, i) => (
                 <a
                   key={m.id}
@@ -535,7 +535,7 @@ export default function ProductHMS() {
         </div>
       </section>
 
-      {/* Security & compliance (deck p.40) — dark card, reference style */}
+      {/* Security & compliance (deck p.40) - dark card, reference style */}
       <section>
         <div className="container">
           <div className="security-card">
@@ -543,7 +543,7 @@ export default function ProductHMS() {
             <h2>Built for India. Secure by design.</h2>
             <p>
               KIBO360 HMS is ABDM-ready and aligned with the DPDP Act 2023, with
-              clinical documentation that supports NABH accreditation — all on an
+              clinical documentation that supports NABH accreditation - all on an
               encrypted, role-based, fully audited platform.
             </p>
             <div className="certs-grid">
@@ -588,11 +588,11 @@ export default function ProductHMS() {
       </section>
 
       {/* FAQ (also emitted as FAQPage structured data) */}
-      <FaqSection faqs={hmsFaqs} title="HMS — frequently asked questions." />
+      <FaqSection faqs={hmsFaqs} title="HMS - frequently asked questions." />
 
       <CTABanner
         title="Ready to modernize your hospital operations?"
-        text="Book a personalized KIBO360 HMS walkthrough for your team — see your own workflows, digitized."
+        text="Book a personalized KIBO360 HMS walkthrough for your team - see your own workflows, digitized."
       />
     </>
   );

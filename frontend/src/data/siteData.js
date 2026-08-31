@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// KIBO360 site content — single source of truth.
+// KIBO360 site content - single source of truth.
 // All copy extracted from "360 Final Deck.pdf" and "Kibo 360 broucher.pdf".
 // Pages only render this data; edit here to change site text.
 // ---------------------------------------------------------------------------
@@ -15,7 +15,7 @@ export const company = {
   email: "info@livexperttechnologies.com",
 };
 
-// Deck p.2 — ecosystem hub around KIBO360
+// Deck p.2 - ecosystem hub around KIBO360
 export const ecosystemNodes = [
   "Operations",
   "Customer Relationships",
@@ -27,7 +27,7 @@ export const ecosystemNodes = [
   "Insights & Analytics",
 ];
 
-// Deck p.2 — bottom value pillars
+// Deck p.2 - bottom value pillars
 export const valuePillars = [
   { icon: "network", title: "Connected Ecosystem", text: "Unify teams, processes and information." },
   { icon: "workflow", title: "Smarter Workflows", text: "Simplify operations and boost productivity." },
@@ -37,12 +37,12 @@ export const valuePillars = [
   { icon: "trending-up", title: "Scalable Growth", text: "Built to grow with your business and industry." },
 ];
 
-// Deck p.2 — about narrative
+// Deck p.2 - about narrative
 export const aboutNarrative = [
   "At Livexpert Technologies, we believe every great organization is powered by people, purpose, and the ability to work as one.",
   "KIBO360 is our vision of a connected digital ecosystem, where technology brings together teams, processes, and information to create smarter, simpler, and more meaningful ways of working.",
-  "Designed for modern organizations, KIBO360 seamlessly connects operations, customer relationships, finance, inventory, healthcare solutions, and industry-specific applications into one unified experience. From everyday tasks to strategic decisions, every workflow is built to move effortlessly — giving people the freedom to focus on what truly matters.",
-  "Whether you're growing a business, transforming an industry, or preparing for what's next, KIBO360 grows with you — bringing clarity, connection, and confidence to every step of your journey.",
+  "Designed for modern organizations, KIBO360 seamlessly connects operations, customer relationships, finance, inventory, healthcare solutions, and industry-specific applications into one unified experience. From everyday tasks to strategic decisions, every workflow is built to move effortlessly - giving people the freedom to focus on what truly matters.",
+  "Whether you're growing a business, transforming an industry, or preparing for what's next, KIBO360 grows with you - bringing clarity, connection, and confidence to every step of your journey.",
 ];
 
 // Brochure badges
@@ -65,7 +65,7 @@ export const products = [
     subdomain: "hms.kibo360.in",
     route: "/products/hms",
     blurb:
-      "End-to-end hospital operations — OPD/IPD, EMR/EHR, diagnostics, pharmacy, finance ERP, HR & payroll, and AI analytics on one intelligent database.",
+      "End-to-end hospital operations - OPD/IPD, EMR/EHR, diagnostics, pharmacy, finance ERP, HR & payroll, and AI analytics on one intelligent database.",
     highlights: ["Patient Access & OPD/IPD", "EMR / EHR", "Diagnostics & Pharmacy", "Finance, HR & Revenue Cycle"],
   },
   {
@@ -76,7 +76,7 @@ export const products = [
     subdomain: "cms.kibo360.in",
     route: "/products/cms",
     blurb:
-      "Everything a modern clinic needs — appointments, queue & token, doctor EMR, e-prescriptions, billing and follow-ups — ready in days, not months.",
+      "Everything a modern clinic needs - appointments, queue & token, doctor EMR, e-prescriptions, billing and follow-ups - ready in days, not months.",
     highlights: ["Appointments & Queue", "Doctor EMR & e-Rx", "Billing & GST Invoicing", "WhatsApp/SMS Reminders"],
   },
   {
@@ -87,7 +87,7 @@ export const products = [
     subdomain: "*.kibo360.in",
     route: null,
     blurb:
-      "Inventory, Finance ERP, LIS and CRM are on the way — every new product plugs into the same KIBO360 ecosystem and shared intelligent database.",
+      "Inventory, Finance ERP, LIS and CRM are on the way - every new product plugs into the same KIBO360 ecosystem and shared intelligent database.",
     highlights: ["Inventory", "Finance", "LIS", "CRM"],
   },
 ];
@@ -100,7 +100,7 @@ export const upcomingProducts = [
     icon: "box",
     subdomain: "inventory.kibo360.in",
     blurb:
-      "Standalone inventory & stores management — stock, batch and expiry tracking, reorder automation, vendors and asset registers for any healthcare facility.",
+      "Standalone inventory & stores management - stock, batch and expiry tracking, reorder automation, vendors and asset registers for any healthcare facility.",
   },
   {
     slug: "finance",
@@ -108,7 +108,7 @@ export const upcomingProducts = [
     icon: "banknote",
     subdomain: "finance.kibo360.in",
     blurb:
-      "Full finance & accounts ERP — general ledger, AP/AR, cash & bank, GST compliance, cost centers and live financial statements.",
+      "Full finance & accounts ERP - general ledger, AP/AR, cash & bank, GST compliance, cost centers and live financial statements.",
   },
   {
     slug: "lis",
@@ -116,7 +116,7 @@ export const upcomingProducts = [
     icon: "flask",
     subdomain: "lis.kibo360.in",
     blurb:
-      "Laboratory Information System for diagnostic labs and chains — sample lifecycle, instrument integration, NABH / ISO 15189-ready QC and reporting.",
+      "Laboratory Information System for diagnostic labs and chains - sample lifecycle, instrument integration, NABH / ISO 15189-ready QC and reporting.",
   },
   {
     slug: "crm",
@@ -124,11 +124,11 @@ export const upcomingProducts = [
     icon: "heart",
     subdomain: "crm.kibo360.in",
     blurb:
-      "Healthcare CRM — enquiries and lead pipelines, patient follow-up journeys, WhatsApp/SMS campaigns and feedback that grows your ratings.",
+      "Healthcare CRM - enquiries and lead pipelines, patient follow-up journeys, WhatsApp/SMS campaigns and feedback that grows your ratings.",
   },
 ];
 
-// Brochure p.2 — capability & business impact matrix
+// Brochure p.2 - capability & business impact matrix
 export const capabilityMatrix = [
   {
     pillar: "Clinical Excellence",
@@ -165,7 +165,7 @@ export const platformStats = [
   { value: "99%", label: "Patient Satisfaction" },
 ];
 
-// Brochure — target sectors
+// Brochure - target sectors
 // img: photo tiles used on the Home "who it's for" section
 export const targetSectors = [
   { icon: "hospital", name: "Hospitals", img: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=700&q=80" },
@@ -175,13 +175,13 @@ export const targetSectors = [
   { icon: "stethoscope", name: "Clinics", img: "https://images.unsplash.com/photo-1638202993928-7267aad84c31?auto=format&fit=crop&w=700&q=80" },
 ];
 
-// Deck p.39 — integrations (India-first)
+// Deck p.39 - integrations (India-first)
 export const integrations = [
   "ABDM / ABHA", "PACS", "LIS", "HL7 / FHIR", "Payment Gateway", "UPI",
   "SMS", "WhatsApp", "Email", "TPA / Insurance APIs", "Medical Devices", "Analytics Engine",
 ];
 
-// Security & compliance — terms used in the Indian health industry
+// Security & compliance - terms used in the Indian health industry
 export const securityFeatures = [
   "ABDM & ABHA Ready", "DPDP Act 2023 Aligned", "NABH-Aligned Workflows", "Role-Based Access",
   "AES-256 Encryption", "Two-Factor Authentication", "Audit Logs", "Backups & Disaster Recovery",
@@ -190,11 +190,11 @@ export const securityFeatures = [
 // Same data grouped for the Home "security hub" layout
 export const securityGroups = [
   {
-    key: "compliance",
-    label: "India Compliance",
-    icon: "shield",
+    key: "certifications",
+    label: "Certifications",
+    icon: "award",
     tone: "violet",
-    items: ["ABDM & ABHA Ready", "DPDP Act 2023 Aligned", "NABH-Aligned Workflows"],
+    items: ["ABHA Certified", "ISO 9001:2015 Quality Management Systems", "CMMI Level 3"],
   },
   {
     key: "access",
@@ -219,7 +219,7 @@ export const securityGroups = [
   },
 ];
 
-// Deck p.42 — roadmap
+// Deck p.42 - roadmap
 export const roadmap = [
   { step: "01", title: "AI Agents", text: "Intelligent agents automating healthcare workflows." },
   { step: "02", title: "Predictive Healthcare", text: "AI-driven insights for early detection and better outcomes." },
@@ -242,10 +242,10 @@ export const hms = {
   heroText:
     "KIBO360 HMS is an AI-powered, cloud-native platform that unifies healthcare operations and enterprise functions for smarter, faster and better outcomes.",
   dashboardStats: [
-    { label: "OPD — Today's Visits", value: "1,243", delta: "↑ 12.5%" },
-    { label: "IPD — Admitted", value: "326", delta: "↑ 8.2%" },
-    { label: "Pharmacy — Total Orders", value: "1,682", delta: "↑ 15.3%" },
-    { label: "Laboratory — Tests Today", value: "2,451", delta: "↑ 10.4%" },
+    { label: "OPD - Today's Visits", value: "1,243", delta: "↑ 12.5%" },
+    { label: "IPD - Admitted", value: "326", delta: "↑ 8.2%" },
+    { label: "Pharmacy - Total Orders", value: "1,682", delta: "↑ 15.3%" },
+    { label: "Laboratory - Tests Today", value: "2,451", delta: "↑ 10.4%" },
   ],
 
   challenges: [
@@ -300,7 +300,7 @@ export const hms = {
       title: "Hospital Operations",
       tagline: "Intelligent Hospital Workflows. Better Care. Better Outcomes.",
       features: [
-        "EMR / EHR — Patient Timeline", "Clinical Notes", "Vitals & Observations",
+        "EMR / EHR - Patient Timeline", "Clinical Notes", "Vitals & Observations",
         "Lab & Radiology Results", "Prescriptions", "Allergies & History",
         "Ward Management", "ICU Management", "Nursing Station", "Operation Theatre",
         "Care Plans", "Nursing Assessment", "Discharge Summary",
@@ -321,7 +321,7 @@ export const hms = {
       tagline: "Accurate. Integrated. Efficient.",
       features: [
         "Automated Sample Management", "Instrument Integration", "Customizable Workflow Automation",
-        "Real-Time Data Analytics", "NABH / ISO 15189 Compliance", "EHR Integration",
+        "Real-Time Data Analytics", "NABH / ISO 15189-Ready Workflows", "EHR Integration",
         "Medicine Management", "Stock & Batch Tracking", "Prescription Analytics",
         "Expiry Alerts", "Reorder & Vendor Management", "Purchase Management",
       ],
@@ -448,7 +448,7 @@ export const hms = {
         { value: "95%", label: "Prediction Accuracy" },
       ],
       extra: {
-        heading: "AI in Action — Business Impact",
+        heading: "AI in Action - Business Impact",
         items: ["40% faster diagnosis with AI-powered insights", "60% documentation time saved with voice assistance", "25% risk reduction via early identification", "28% increase in patient satisfaction"],
       },
     },
@@ -504,9 +504,9 @@ export const hms = {
 export const cms = {
   heroBadges: ["AI Powered", "Secure", "Cloud Based"],
   heroTitle: "Clinic Management Software (CMS)",
-  heroSub: "Everything a Modern Clinic Needs — from Appointment to Prescription to Payment",
+  heroSub: "Everything a Modern Clinic Needs - from Appointment to Prescription to Payment",
   heroText:
-    "KIBO360 CMS brings the same AI-powered platform that runs hospitals to single doctors, polyclinics and clinic chains — simple to start, powerful as you grow.",
+    "KIBO360 CMS brings the same AI-powered platform that runs hospitals to single doctors, polyclinics and clinic chains - simple to start, powerful as you grow.",
 
   challenges: [
     { icon: "file-text", name: "Paper Prescriptions" },
@@ -522,7 +522,7 @@ export const cms = {
     { icon: "stethoscope", title: "Doctor EMR & e-Prescriptions", text: "Patient timeline, vitals, clinical notes, allergies and printable e-prescriptions." },
     { icon: "receipt", title: "Billing & GST Invoicing", text: "Smart billing, GST-ready invoices, discounts, packages and daily collection reports." },
     { icon: "pill", title: "Pharmacy & Stock", text: "Dispensing, stock tracking, expiry alerts and purchase management for in-clinic pharmacy." },
-    { icon: "users", title: "Patient Records & Portal", text: "Complete history, reports and documents — patients access everything from their portal." },
+    { icon: "users", title: "Patient Records & Portal", text: "Complete history, reports and documents - patients access everything from their portal." },
     { icon: "video", title: "Teleconsultation", text: "Video consults with online payments, e-prescriptions and digital consultation notes." },
     { icon: "message", title: "WhatsApp / SMS Reminders", text: "Automated appointment reminders and follow-ups that cut no-shows." },
     { icon: "bar-chart", title: "Reports & Analytics", text: "Revenue, visits, doctor performance and patient trends on a live dashboard." },
@@ -539,8 +539,8 @@ export const cms = {
 
   whyChoose: [
     "Made for single doctors, polyclinics & chains",
-    "Live in days — no heavy setup",
-    "Same KIBO360 platform as HMS — upgrade to full hospital suite without migration",
+    "Live in days - no heavy setup",
+    "Same KIBO360 platform as HMS - upgrade to full hospital suite without migration",
     "Works on desktop, tablet & mobile",
     "WhatsApp-first patient communication",
     "24×7 support",
@@ -548,33 +548,42 @@ export const cms = {
 };
 
 // ---------------------------------------------------------------------------
-// Testimonials — PLACEHOLDER quotes (no real names). Replace with real,
+// Testimonials - PLACEHOLDER quotes (no real names). Replace with real,
 // permissioned customer quotes before production launch.
 // ---------------------------------------------------------------------------
 
-// `img` is optional — add a photo URL (or /team/name.jpg in public/) to show
-// the reviewer's picture; leave null to show an initials avatar instead.
+// Reviewer photos live in frontend/public/team/. `img` is optional -
+// leave null to show an initials avatar instead.
+// NOTE: quote wording is drafted - have each doctor confirm/replace their
+// statement before production launch.
 export const testimonials = [
   {
+    name: "Dr. Jv Pranav Sharma",
+    role: "General Surgeon",
+    img: "/team/pranav-sharma.jpg",
     quote:
-      "Claim reconciliations that took our billing team hours now close in minutes, and the ward team finally sees live bed status instead of calling the front desk.",
-    role: "Medical Director",
-    org: "200-bed multi-specialty hospital, NCR",
-    img: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=200&q=80",
+      "Admissions, ward notes and discharge summaries used to eat my evenings. With Kibo360 the whole surgical workflow is digital and audit-ready.",
   },
   {
+    name: "Dr. Manya",
+    role: "Dentist",
+    img: "/team/manya.jpg",
     quote:
-      "We started with just OPD and pharmacy, then switched on lab and payroll without any data migration. That modularity is why we chose KIBO360.",
-    role: "Chief Operations Officer",
-    org: "Regional hospital group, 3 locations",
-    img: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=200&q=80",
+      "Reminders cut our no-shows dramatically, and patients love getting reports on their phone. It feels like a big-hospital system sized for my clinic.",
   },
   {
+    name: "Dr. Aditya Pathani",
+    role: "General Physician",
+    img: "/team/aditya-pathani.jpg",
     quote:
-      "WhatsApp reminders alone cut our no-shows dramatically. Patients get reports on their phone and stopped queuing at the records counter.",
-    role: "Clinic Owner",
-    org: "Polyclinic chain, Uttar Pradesh",
-    img: null,
+      "My OPD runs on Kibo360 end to end - appointments, e-prescriptions and billing on one screen. Consultations are faster and my front desk finally breathes.",
+  },
+  {
+    name: "Dr. Akshay Tekta",
+    role: "Oral and Maxillofacial Surgeon",
+    img: "/team/akshay-tekta.jpg",
+    quote:
+      "From OT scheduling to post-op follow-ups on WhatsApp, everything stays connected. My team spends its time with patients, not with paperwork.",
   },
 ];
 
@@ -585,7 +594,7 @@ export const testimonials = [
 export const hmsFaqs = [
   {
     q: "What is KIBO360 Hospital Management Software (HMS)?",
-    a: "KIBO360 HMS is an AI-powered, cloud-native hospital management platform that unifies OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance ERP, HR & payroll and analytics on a single intelligent database — one patient record and one billing engine across your whole hospital.",
+    a: "KIBO360 HMS is an AI-powered, cloud-native hospital management platform that unifies OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance ERP, HR & payroll and analytics on a single intelligent database - one patient record and one billing engine across your whole hospital.",
   },
   {
     q: "Is HMS the same as HIS (Hospital Information System)?",
@@ -593,11 +602,11 @@ export const hmsFaqs = [
   },
   {
     q: "Is KIBO360 HMS cloud-based?",
-    a: "Yes — KIBO360 is cloud-native, so it is accessible from anywhere, scales with your organization and supports multi-hospital deployments with centralized, multi-location accounting.",
+    a: "Yes - KIBO360 is cloud-native, so it is accessible from anywhere, scales with your organization and supports multi-hospital deployments with centralized, multi-location accounting.",
   },
   {
     q: "How long does implementation take?",
-    a: "KIBO360 is modular: most hospitals go live with core modules (patient access, billing, pharmacy) in weeks, then switch on additional modules like LIS, HR & payroll or asset management as they grow — no re-implementation needed.",
+    a: "KIBO360 is modular: most hospitals go live with core modules (patient access, billing, pharmacy) in weeks, then switch on additional modules like LIS, HR & payroll or asset management as they grow - no re-implementation needed.",
   },
   {
     q: "Does it integrate with ABDM, lab instruments and existing systems?",
@@ -616,11 +625,11 @@ export const cmsFaqs = [
   },
   {
     q: "How quickly can my clinic go live?",
-    a: "Most clinics are live in days, not months — there is no heavy setup. You can start with appointments and billing on day one and add pharmacy or teleconsultation later.",
+    a: "Most clinics are live in days, not months - there is no heavy setup. You can start with appointments and billing on day one and add pharmacy or teleconsultation later.",
   },
   {
     q: "Can I upgrade from CMS to the full HMS later?",
-    a: "Yes — CMS runs on the same KIBO360 platform and database as HMS. When your clinic grows into a hospital, you upgrade in place: your patients, records and billing history come with you, with zero data migration.",
+    a: "Yes - CMS runs on the same KIBO360 platform and database as HMS. When your clinic grows into a hospital, you upgrade in place: your patients, records and billing history come with you, with zero data migration.",
   },
   {
     q: "Does CMS send WhatsApp and SMS reminders?",
@@ -632,7 +641,7 @@ export const cmsFaqs = [
   },
   {
     q: "Is my clinic's data secure?",
-    a: "Yes — the same bank-grade security as our hospital platform, aligned with India's DPDP Act 2023: encrypted data, role-based access, audit logs and automatic backups.",
+    a: "Yes - the same bank-grade security as our hospital platform, aligned with India's DPDP Act 2023: encrypted data, role-based access, audit logs and automatic backups.",
   },
 ];
 
@@ -650,7 +659,7 @@ export const images = {
 };
 
 // ---------------------------------------------------------------------------
-// Legal pages (drafts — review by legal counsel before production)
+// Legal pages (drafts - review by legal counsel before production)
 // ---------------------------------------------------------------------------
 
 export const legalMeta = {

@@ -43,8 +43,8 @@ export default function Products() {
   return (
     <>
       <Seo
-        title="Products — Hospital, Clinic & Healthcare Software Suite"
-        description="Explore the KIBO360 product family: Hospital Management Software (HMS) and Clinic Management Software (CMS) available today — Inventory, Finance ERP, LIS and CRM coming soon, all on one intelligent platform."
+        title="Products - Hospital, Clinic & Healthcare Software Suite"
+        description="Explore the KIBO360 product family: Hospital Management Software (HMS) and Clinic Management Software (CMS) available today - Inventory, Finance ERP, LIS and CRM coming soon, all on one intelligent platform."
         path="/products"
         jsonLd={productsJsonLd}
       />
@@ -65,7 +65,7 @@ export default function Products() {
           </h1>
           <p className="section-subtitle" style={{ margin: "0 auto" }}>
             Every KIBO360 product runs on its own subdomain but shares the same
-            intelligent database — start with one, add more as you grow, and never
+            intelligent database - start with one, add more as you grow, and never
             migrate your data.
           </p>
         </div>
@@ -112,7 +112,7 @@ export default function Products() {
           <SectionHeading
             eyebrow="On the Roadmap"
             title="Coming soon to the platform."
-            subtitle="Each launches as a standalone product on its own subdomain — and clicks straight into HMS and CMS when you need the full suite."
+            subtitle="Each launches as a standalone product on its own subdomain - and clicks straight into HMS and CMS when you need the full suite."
             center={false}
           />
           <div className="grid grid-4">
@@ -150,7 +150,7 @@ export default function Products() {
             <p>
               <strong>One intelligent database underneath everything.</strong>{" "}
               Start with a single product and switch on the next one without any
-              data migration — patients, billing and records carry over instantly.
+              data migration - patients, billing and records carry over instantly.
               {" "}{company.tagline}
             </p>
           </div>
@@ -159,7 +159,7 @@ export default function Products() {
 
       <CTABanner
         title="Not sure which product fits?"
-        text="Tell us about your facility — we'll walk you through the right starting point."
+        text="Tell us about your facility - we'll walk you through the right starting point."
       />
     </>
   );

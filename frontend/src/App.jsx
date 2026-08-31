@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
 import BackToTop from "./components/BackToTop.jsx";
+import FloatingWidgets from "./components/FloatingWidgets.jsx";
 import { DemoModalProvider } from "./components/DemoModalContext.jsx";
 
 export default function App() {
@@ -15,7 +16,7 @@ export default function App() {
 
   // Subtle scroll-reveal: sections fade in as they enter the viewport.
   useEffect(() => {
-    // Note: .module-chapter is deliberately NOT included — a transform
+    // Note: .module-chapter is deliberately NOT included - a transform
     // transition on those sticky cards breaks their pinning in Blink.
     const sections = document.querySelectorAll("main section");
     const observer = new IntersectionObserver(
@@ -48,6 +49,7 @@ export default function App() {
         </main>
         <Footer />
         <BackToTop />
+        <FloatingWidgets />
       </div>
     </DemoModalProvider>
   );

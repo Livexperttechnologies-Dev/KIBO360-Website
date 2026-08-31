@@ -12,7 +12,7 @@ import {
   integrations, securityGroups, testimonials, images,
 } from "../data/siteData.js";
 
-// Home product cards — copy comes verbatim from "Kibo360 Homepage.docx"
+// Home product cards - copy comes verbatim from "Kibo360 Homepage.docx"
 // (Home-page only; /products and the footer keep their own copy).
 const homeProductCards = [
   {
@@ -35,10 +35,10 @@ const homeProductCards = [
 ];
 
 const indiaReady = [
-  { title: "ABDM & ABHA Ready", text: "Create and link ABHA health IDs and connect to the Ayushman Bharat Digital Mission." },
-  { title: "NABH-Aligned", text: "Clinical documentation and audit trails that support NABH accreditation readiness." },
+  { title: "ABHA Certified", text: "Create, verify and link ABHA health IDs directly from our healthcare products." },
   { title: "GST-Compliant Billing", text: "Tax-ready invoicing with GST built into every bill and pharmacy sale." },
-  { title: "DPDP Act 2023", text: "Patient data handling aligned with India's Digital Personal Data Protection Act." },
+  { title: "UPI & Card Payments", text: "Accept UPI and card payments through integrated payment gateways." },
+  { title: "WhatsApp & SMS Reminders", text: "Appointment reminders, reports and follow-ups on the channels patients already use." },
 ];
 
 const homeJsonLd = {
@@ -360,8 +360,8 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
             <span className="eyebrow orange">Built for India</span>
             <h2>Ready for how Indian healthcare actually runs.</h2>
             <p style={{ margin: "14px 0 20px" }}>
-              From ABHA health IDs to GST invoicing and NABH-aligned records, KIBO360
-              is built around the standards, schemes and workflows Indian hospitals and
+              From ABHA health IDs to GST invoicing and UPI payments, KIBO360 is
+              built around the standards, schemes and workflows Indian hospitals and
               clinics deal with every day.
             </p>
             <div className="grid grid-2" style={{ gap: 14 }}>
@@ -386,10 +386,10 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
               <div className="img-overlay">
                 <div className="overlay-header">
                   <span>ABHA Verified</span>
-                  <span className="pill green">ABDM</span>
+                  <span className="pill green">Linked</span>
                 </div>
                 <div className="overlay-item-flex"><span>GST Invoice</span> <strong>Auto-generated</strong></div>
-                <div className="overlay-item-flex"><span>NABH Documentation</span> <strong>Ready</strong></div>
+                <div className="overlay-item-flex"><span>WhatsApp Reminder</span> <strong>Sent</strong></div>
               </div>
             </div>
           </div>
@@ -481,7 +481,7 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
           <SectionHeading
             eyebrow="Security & Compliance"
             title="Built to protect. Designed to comply."
-            subtitle="Defense in depth for patient data — Indian compliance standards on the outside, bank-grade controls at the core."
+            subtitle="Defense in depth for patient data - certified quality processes on the outside, bank-grade controls at the core."
           />
           <div className="security-hub">
             <div className="security-hub-col left">
@@ -546,7 +546,7 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
           />
           <div className="test-grid">
             {testimonials.map((t) => (
-              <figure key={t.role} className="test-card">
+              <figure key={t.name} className="test-card">
                 <span className="quote-mark" aria-hidden="true">“</span>
                 <blockquote>{t.quote}</blockquote>
                 <figcaption className="test-user">
@@ -561,12 +561,12 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
                     />
                   ) : (
                     <span className="test-avatar initials" aria-hidden="true">
-                      {t.role.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                      {t.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                     </span>
                   )}
                   <div>
-                    <strong>{t.role}</strong>
-                    <span>{t.org}</span>
+                    <strong>{t.name}</strong>
+                    <span>{t.role}</span>
                   </div>
                 </figcaption>
               </figure>

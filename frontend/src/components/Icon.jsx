@@ -1,4 +1,4 @@
-// Custom line-icon set for KIBO360 — no emoji.
+// Custom line-icon set for KIBO360 - no emoji.
 // 24x24 grid, stroke = currentColor so icons inherit color from their container.
 
 const paths = {
@@ -213,6 +213,13 @@ const paths = {
   "chevron-down": <path d="m6 9 6 6 6-6" />,
   "chevron-left": <path d="m14 6-6 6 6 6" />,
   "chevron-right": <path d="m10 6 6 6-6 6" />,
+  award: (
+    <>
+      <circle cx="12" cy="9" r="5.5" />
+      <path d="m8.8 13.6-1.6 7 4.8-2.4 4.8 2.4-1.6-7" />
+      <path d="m10 9 1.5 1.5L14.5 7.5" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 20, className = "", strokeWidth = 1.7 }) {

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-/** items: [{ label, to }] — last item is the current page (no link). */
+/** items: [{ label, to }] - last item is the current page (no link). */
 export default function Breadcrumbs({ items }) {
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumb">

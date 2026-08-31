@@ -23,12 +23,12 @@ export default function About() {
   return (
     <>
       <Seo
-        title="About Us — The Team Behind the KIBO360 Platform"
-        description="KIBO360 by Livexpert Technologies is a connected digital ecosystem for hospitals, clinics, diagnostic chains and medical colleges — built on the belief that technology should bring teams, processes and information together."
+        title="About Us - The Team Behind the KIBO360 Platform"
+        description="KIBO360 by Livexpert Technologies is a connected digital ecosystem for hospitals, clinics, diagnostic chains and medical colleges - built on the belief that technology should bring teams, processes and information together."
         path="/about"
         jsonLd={aboutJsonLd}
       />
-      {/* Fold 1 — hero */}
+      {/* Fold 1 - hero */}
       <section className="page-hero">
         <div className="container">
           <span className="eyebrow">About Us</span>
@@ -48,7 +48,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Fold 2 — About Kibo360 */}
+      {/* Fold 2 - About Kibo360 */}
       <section>
         <div className="container" style={{ maxWidth: 860 }}>
           <h2 style={{ marginBottom: 18 }}>About Kibo360</h2>
@@ -71,7 +71,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Fold 3 — Why We Built Kibo360 (existing pillar cards kept) */}
+      {/* Fold 3 - Why We Built Kibo360 (existing pillar cards kept) */}
       <section className="tight">
         <div className="container">
           <SectionHeading
@@ -98,7 +98,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Fold 4 (blank in doc) — strategic pillars kept as-is */}
+      {/* Fold 4 (blank in doc) - strategic pillars kept as-is */}
       <section>
         <div className="container">
           <SectionHeading
@@ -120,7 +120,54 @@ export default function About() {
         </div>
       </section>
 
-      {/* Fold 5 — industries */}
+      {/* Certifications */}
+      <section className="tight">
+        <div className="container">
+          <SectionHeading
+            eyebrow="Certifications"
+            title="Certified. Compliant. Trusted."
+            subtitle="Our processes and products are independently certified, so you can build on Kibo360 with confidence."
+          />
+          <div className="grid grid-3">
+            <div className="feature-card cert-flag">
+              <span className="icon-badge" aria-hidden="true">
+                <Icon name="award" size={24} />
+              </span>
+              <h3>ISO 9001:2015 Certified</h3>
+              <p>
+                Livexpert Technologies is certified for{" "}
+                <strong>Quality Management Systems</strong> under ISO 9001:2015 -
+                the processes behind building, delivering and supporting Kibo360
+                meet the international quality standard.
+              </p>
+            </div>
+            <div className="feature-card cert-flag">
+              <span className="icon-badge" aria-hidden="true">
+                <Icon name="target" size={24} />
+              </span>
+              <h3>CMMI Level 3</h3>
+              <p>
+                Appraised at <strong>CMMI Maturity Level 3</strong> - our
+                engineering and delivery processes are defined, standardized and
+                consistently managed across projects.
+              </p>
+            </div>
+            <div className="feature-card cert-flag">
+              <span className="icon-badge" aria-hidden="true">
+                <Icon name="shield" size={24} />
+              </span>
+              <h3>ABHA Certified</h3>
+              <p>
+                Kibo360 holds <strong>ABHA certification</strong> under the
+                Ayushman Bharat Digital Mission - create, verify and link ABHA
+                health IDs directly from our healthcare products.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Fold 5 - industries */}
       <section className="tight">
         <div className="container">
           <SectionHeading
@@ -147,7 +194,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Roadmap teaser (no matching fold — kept as-is) */}
+      {/* Roadmap teaser (no matching fold - kept as-is) */}
       <section>
         <div className="container">
           <SectionHeading
@@ -166,7 +213,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Fold 6 — final CTA */}
+      {/* Fold 6 - final CTA */}
       <CTABanner
         title="Ready to Make Software One Less Thing to Worry About?"
         text={`Talk to the ${company.poweredBy} team about your digital transformation.`}

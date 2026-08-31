@@ -29,7 +29,7 @@ export function DemoModalProvider({ children }) {
   }, []);
 
   // Real scroll lock: overflow on <body> does not propagate to the viewport
-  // while <html> has overflow-x: clip, so lock the root element itself —
+  // while <html> has overflow-x: clip, so lock the root element itself -
   // with scrollbar-width compensation to avoid a layout jump.
   useEffect(() => {
     const root = document.documentElement;
@@ -73,7 +73,7 @@ export function DemoModalProvider({ children }) {
 
   // Auto-open when the visitor scrolls deep enough:
   // Home -> the products section; other pages -> the 5th content section
-  // (never the CTA banner — popping over a "Book a Demo" button is absurd).
+  // (never the CTA banner - popping over a "Book a Demo" button is absurd).
   useEffect(() => {
     let shown = false;
     try { shown = !!sessionStorage.getItem(AUTO_KEY); } catch { shown = true; }
@@ -109,7 +109,7 @@ export function DemoModalProvider({ children }) {
           role="presentation"
           onMouseDown={(e) => { downOnOverlay.current = e.target === e.currentTarget; }}
           onClick={(e) => {
-            // Close only on a true backdrop click — not on a text-selection
+            // Close only on a true backdrop click - not on a text-selection
             // drag that starts inside the form and releases on the backdrop.
             if (downOnOverlay.current && e.target === e.currentTarget) close();
           }}
@@ -128,7 +128,7 @@ export function DemoModalProvider({ children }) {
             <div className="modal-head">
               <span className="eyebrow">Book a Free Demo</span>
               <h3>See KIBO360 on your own workflows.</h3>
-              <p>Tell us a little about your facility — we respond within one business day.</p>
+              <p>Tell us a little about your facility - we respond within one business day.</p>
             </div>
             <ContactForm />
           </div>

@@ -28,7 +28,7 @@ export default function CTABanner({ title, text, primary, secondaryLabel }) {
             <div className="cta-copy">
               <span className="cta-eyebrow">Get Started</span>
               <h2>{title || company.motto}</h2>
-              <p>{text || "See KIBO360 in action — book a personalized demo for your organization."}</p>
+              <p>{text || "See KIBO360 in action - book a personalized demo for your organization."}</p>
             </div>
             <div className="cta-actions">
               {primary?.to ? (

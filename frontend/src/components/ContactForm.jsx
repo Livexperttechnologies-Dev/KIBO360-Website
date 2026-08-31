@@ -99,7 +99,7 @@ export default function ContactForm() {
           rows="5"
           value={form.message}
           onChange={update}
-          placeholder="Tell us about your requirements — beds, departments, locations…"
+          placeholder="Tell us about your requirements - beds, departments, locations…"
           required
           aria-invalid={!!errors.message}
         />

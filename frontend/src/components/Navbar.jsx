@@ -6,10 +6,10 @@ import { products } from "../data/siteData.js";
 
 function Logo() {
   return (
-    <Link to="/" className="logo" aria-label="KIBO360 — One Platform. Every Business.">
+    <Link to="/" className="logo" aria-label="KIBO360 - One Platform. Every Business.">
       <img
         src="/kibo360-logo.png"
-        alt="KIBO360 — One Platform. Every Business."
+        alt="KIBO360 - One Platform. Every Business."
         className="logo-img"
         width="330"
         height="136"
@@ -48,7 +48,7 @@ export default function Navbar() {
             <div className="nav-dropdown-menu">
               {liveProducts.map((p) => (
                 <NavLink key={p.slug} to={p.route} onClick={close}>
-                  <strong>{p.short}</strong> — {p.name}
+                  <strong>{p.short}</strong> - {p.name}
                 </NavLink>
               ))}
               <NavLink to="/products" onClick={close} className="nav-all-products">
