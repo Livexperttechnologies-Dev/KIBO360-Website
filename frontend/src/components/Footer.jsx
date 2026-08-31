@@ -14,7 +14,7 @@ export default function Footer() {
             width="330"
             height="136"
           />
-          <p className="footer-motto">"{company.motto}"</p>
+          <p className="footer-motto">"One Platform Every Business"</p>
           <p className="footer-powered">Powered by {company.poweredBy}</p>
         </div>
 
@@ -41,7 +41,7 @@ export default function Footer() {
             <li><Link to="/about">About Us</Link></li>
             <li><Link to="/contact">Contact Us</Link></li>
             <li><Link to="/privacy-policy">Privacy Policy</Link></li>
-            <li><Link to="/terms">Terms &amp; Conditions</Link></li>
+            <li><Link to="/terms">Terms of Use</Link></li>
           </ul>
         </div>
 

@@ -7,10 +7,32 @@ import CTABanner from "../components/CTABanner.jsx";
 import Icon from "../components/Icon.jsx";
 import { useDemoModal } from "../components/DemoModalContext.jsx";
 import {
-  company, ecosystemNodes, valuePillars, aboutNarrative, platformBadges,
-  products, upcomingProducts, capabilityMatrix, platformStats, targetSectors,
+  ecosystemNodes, valuePillars, platformBadges,
+  products, capabilityMatrix, platformStats, targetSectors,
   integrations, securityGroups, testimonials, images,
 } from "../data/siteData.js";
+
+// Home product cards — copy comes verbatim from "Kibo360 Homepage.docx"
+// (Home-page only; /products and the footer keep their own copy).
+const homeProductCards = [
+  {
+    name: "HMS", short: "HMS", live: true, route: "/products/hms", subdomain: "hms.kibo360.in",
+    blurb: "Operations, Patients, Auto Updates, Billings with Data Security",
+    highlights: ["Patient Access & OPD/IPD", "EMR / EHR", "Diagnostics & Pharmacy"],
+  },
+  {
+    name: "CMS", short: "CMS", live: true, route: "/products/cms", subdomain: "cms.kibo360.in",
+    blurb: "Streamline clinical operations, patient records, care workflows, and healthcare processes.",
+    highlights: ["Appointments & Queue", "Doctor EMR & e-Rx", "Billing & GST Invoicing"],
+  },
+  { name: "ERP", icon: "banknote", blurb: "Manage core business operations, resources, and processes." },
+  { name: "CRM", icon: "heart", subdomain: "crm.kibo360.in", blurb: "Manage customer relationships, sales, and interactions." },
+  
+  { name: "LIS", icon: "flask", subdomain: "lis.kibo360.in", blurb: "Manage laboratory processes, records, and reporting with instrument integration." },
+  
+  { name: "Inventory", icon: "box", subdomain: "inventory.kibo360.in", blurb: "Track stock, manage inventory levels, and keep products moving efficiently." },
+  { name: "And More", icon: "sparkle", moreLink: true, blurb: "Explore solutions built for other business needs as Kibo360 continues to grow." },
+];
 
 const indiaReady = [
   { title: "ABDM & ABHA Ready", text: "Create and link ABHA health IDs and connect to the Ayushman Bharat Digital Mission." },
@@ -118,19 +140,19 @@ export default function Home() {
               <span className="hero-badge soft"><Icon name="lock" size={14} /> Secure &amp; Compliant</span>
             </div></div>
             <h1>
-              One Platform.{" "}
-              <span className="gradient-text">Endless Possibilities.</span>
+              Everything your business needs,{" "}
+              <span className="gradient-text">connected in one platform.</span>
             </h1>
             <p className="hero-text">
-              Run your entire hospital or clinic on one intelligent database. KIBO360
-              unifies patient care, diagnostics, pharmacy, finance and HR - so your
-              teams stop juggling disconnected software and start delivering better
-              care, faster.
+              Stop switching between disconnected tools. Kibo360 brings business
+              software together on one growing platform, helping you manage
+              operations, customers, communication, and specialised business needs
+              from one place.
             </p>
             <div className="hero-actions">
-              <Link to="/products" className="btn btn-primary btn-lg">Explore Products</Link>
+              <Link to="/products" className="btn btn-primary btn-lg">Explore Kibo360</Link>
               <button type="button" className="btn btn-outline btn-lg" onClick={openDemo}>
-                Book a Free Demo
+                Simplify your Business Operations
               </button>
             </div>
             <p className="hero-note">
@@ -143,9 +165,13 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         </div>
       </section>
 
-      {/* 2 - Trust strip (brochure badges, compact glass bar) */}
+      {/* 2 - Fold 3: platform capabilities (existing cards kept, per doc) */}
       <section className="tight">
         <div className="container">
+          <SectionHeading
+            title="The Platform Your Business Needs to Get More Done."
+            subtitle="When your teams spend too much time switching between systems, searching for information, and managing routine tasks, work slows down. Kibo360 brings the essential capabilities your teams need into one connected platform, helping them work faster, stay organised, and keep business moving."
+          />
           <div className="trust-bar">
             {platformBadges.map((b) => (
               <div key={b.title} className="trust-item">
@@ -167,10 +193,13 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         <div className="container split">
           <div>
             <span className="eyebrow">About KIBO360</span>
-            <h2>Where possibilities come together.</h2>
-            <p style={{ margin: "14px 0 12px" }}>{aboutNarrative[0]}</p>
-            <p style={{ marginBottom: 24 }}>{aboutNarrative[1]}</p>
-            <Link to="/about" className="btn btn-outline">Our Story</Link>
+            <h2>Your Business Will Evolve. Your Ecosystem Should Too.</h2>
+            <p style={{ margin: "14px 0 24px" }}>
+              Kibo360 isn&apos;t limited to today&apos;s solutions. Our continuously
+              expanding platform addresses new business needs, industries, and ways
+              of working. You walk with trends; Kibo360 walks with you.
+            </p>
+            <Link to="/about" className="btn btn-outline">Discover Kibo360</Link>
           </div>
           <div className="split-visual">
             <div className="img-wrapper">
@@ -199,8 +228,8 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
       <section className="tight">
         <div className="container">
           <SectionHeading
-            eyebrow="Why KIBO360"
-            title="Six principles behind the platform."
+            title="Why Kibo360?"
+            subtitle="As your business grows, managing more systems, more teams, and more processes can quickly become complex. Kibo360 brings the right capabilities together in one connected platform, helping you reduce complexity, improve visibility, and stay in control of your business as it grows."
           />
           <div className="grid grid-3">
             {valuePillars.map((v, i) => (
@@ -226,8 +255,8 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         <div className="container">
           <SectionHeading
             eyebrow="Our Products"
-            title="One platform. A growing family of products."
-            subtitle="Pick the product that fits your organization today - every KIBO360 product shares the same intelligent database, so you can add more as you grow."
+            title="Everything You Need to Run Your Business"
+            subtitle="Kibo360 brings together software for the different aspects of your business. Manage everything from teams & collaboration to inventory management, operations, and more in one place."
           />
           {/* Horizontal scroller: live products + coming-soon cards */}
           <div className="scroller-controls">
@@ -251,50 +280,54 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
             </button>
           </div>
           <div className="product-scroller compact" role="list" ref={scrollerRef} onScroll={updateArrows}>
-            {products.filter((p) => p.route).map((p) => (
-              <article key={p.slug} className="product-card" role="listitem">
+            {homeProductCards.map((p) => (
+              <article
+                key={p.name}
+                className={`product-card ${p.live ? "" : "soon"}`}
+                role="listitem"
+              >
                 <div className="product-top">
-                  <span className="product-avatar">{p.short}</span>
-                  <span className="product-status">{p.status}</span>
-                </div>
-                <h3>{p.name}</h3>
-                <p className="blurb">{p.blurb}</p>
-                <div className="product-highlights">
-                  {p.highlights.map((h) => <span key={h}>{h}</span>)}
-                </div>
-                <p className="product-sub">
-                  Runs at <code>{p.subdomain}</code>
-                </p>
-                <div className="product-actions">
-                  <Link to={p.route} className="btn btn-primary">Learn More</Link>
-                  <button type="button" className="btn btn-outline" onClick={openDemo}>
-                    Get a Demo
-                  </button>
-                </div>
-              </article>
-            ))}
-            {upcomingProducts.map((p) => (
-              <article key={p.slug} className="product-card soon" role="listitem">
-                <div className="product-top">
-                  <span className="product-avatar soon-avatar" aria-hidden="true">
-                    <Icon name={p.icon} size={24} />
+                  {p.live ? (
+                    <span className="product-avatar">{p.short}</span>
+                  ) : (
+                    <span className="product-avatar soon-avatar" aria-hidden="true">
+                      <Icon name={p.icon} size={24} />
+                    </span>
+                  )}
+                  <span className={`product-status ${p.live ? "" : "soon"}`}>
+                    {p.live ? "Live" : "Coming Soon"}
                   </span>
-                  <span className="product-status soon">Coming Soon</span>
                 </div>
                 <h3>{p.name}</h3>
                 <p className="blurb">{p.blurb}</p>
-                <p className="product-sub">
-                  Will run at <code>{p.subdomain}</code>
-                </p>
+                {p.highlights && (
+                  <div className="product-highlights">
+                    {p.highlights.map((h) => <span key={h}>{h}</span>)}
+                  </div>
+                )}
+                {p.subdomain && (
+                  <p className="product-sub">
+                    {p.live ? "Runs at" : "Will run at"} <code>{p.subdomain}</code>
+                  </p>
+                )}
                 <div className="product-actions">
-                  <button type="button" className="btn btn-outline" onClick={openDemo}>
-                    Get Early Access
-                  </button>
+                  {p.route && (
+                    <Link to={p.route} className="btn btn-primary">Learn More</Link>
+                  )}
+                  {p.moreLink ? (
+                    <Link to="/products" className="btn btn-outline">Explore All Solutions</Link>
+                  ) : (
+                    <button type="button" className="btn btn-outline" onClick={openDemo}>
+                      {p.live ? "Get a Demo" : "Get Early Access"}
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
           </div>
-          <p className="scroller-hint">Scroll sideways to see all products — or <Link to="/products">view the full catalog</Link>.</p>
+          <p className="scroller-hint">
+            <Link to="/products" className="btn btn-primary">Explore All Solutions</Link>
+          </p>
         </div>
       </section>
 
@@ -376,10 +409,14 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         </div>
       </section>
 
-      {/* 8 - Target sectors (photo tiles) */}
+      {/* 8 - Fold 5: industries (photo tiles kept, copy from doc) */}
       <section>
         <div className="container">
-          <SectionHeading eyebrow="Who it's for" title="Built for every care setting." />
+          <SectionHeading
+            eyebrow="Who it's for"
+            title="One Platform. Different Businesses."
+            subtitle="Every business has its own way of working and its own set of challenges. Kibo360 is built with that in mind, offering software solutions that work across different industries, teams, and business needs."
+          />
           <div className="grid grid-5 sector-photos">
             {targetSectors.map((s) => (
               <figure key={s.name} className="sector-photo">
@@ -394,6 +431,14 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
               </figure>
             ))}
           </div>
+          <p className="section-subtitle" style={{ margin: "26px auto 18px", textAlign: "center" }}>
+            Whether you&apos;re running a business, managing customers, running a
+            healthcare organisation, managing a laboratory, or handling specialised
+            operations, Kibo360 has solutions designed to help you get the job done.
+          </p>
+          <p style={{ textAlign: "center", margin: "0 auto" }}>
+            <Link to="/products" className="btn btn-outline">Find the Right Solution</Link>
+          </p>
         </div>
       </section>
 
@@ -530,10 +575,12 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
         </div>
       </section>
 
-      {/* 11 - CTA */}
+      {/* 11 - Fold 9: final CTA */}
       <CTABanner
-        title={company.motto}
+        title="You Run Your Business. We'll Handle the Software."
         text="See how KIBO360 unifies your entire organization - book a personalized demo."
+        primary={{ label: "Explore Kibo360", to: "/products" }}
+        secondaryLabel="Talk to Our Team"
       />
     </>
   );

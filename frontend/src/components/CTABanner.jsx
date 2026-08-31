@@ -1,12 +1,15 @@
+import { Link } from "react-router-dom";
 import Icon from "./Icon.jsx";
 import { useDemoModal } from "./DemoModalContext.jsx";
 import { company } from "../data/siteData.js";
 
 /**
- * Final call-to-action: a floating brand-gradient card on the light page
- * background, visually separate from the dark footer that follows it.
+ * Final call-to-action card.
+ * Optional overrides (used by Home): `primary` = { label, to } renders a link
+ * instead of the default Book-a-Demo modal button; `secondaryLabel` renders a
+ * modal-opening button instead of the default phone-call link.
  */
-export default function CTABanner({ title, text }) {
+export default function CTABanner({ title, text, primary, secondaryLabel }) {
   const { openDemo } = useDemoModal();
   return (
     <section className="cta-banner">
@@ -28,15 +31,25 @@ export default function CTABanner({ title, text }) {
               <p>{text || "See KIBO360 in action — book a personalized demo for your organization."}</p>
             </div>
             <div className="cta-actions">
-              <button type="button" className="btn btn-light btn-lg" onClick={openDemo}>
-                Book a Demo
-              </button>
-              <a
-                href={`tel:${company.phone.replace(/[^+\d]/g, "")}`}
-                className="btn btn-call-dark btn-lg"
-              >
-                <Icon name="phone" size={17} /> Call {company.phone}
-              </a>
+              {primary?.to ? (
+                <Link to={primary.to} className="btn btn-light btn-lg">{primary.label}</Link>
+              ) : (
+                <button type="button" className="btn btn-light btn-lg" onClick={openDemo}>
+                  {primary?.label || "Book a Demo"}
+                </button>
+              )}
+              {secondaryLabel ? (
+                <button type="button" className="btn btn-call-dark btn-lg" onClick={openDemo}>
+                  <Icon name="phone" size={17} /> {secondaryLabel}
+                </button>
+              ) : (
+                <a
+                  href={`tel:${company.phone.replace(/[^+\d]/g, "")}`}
+                  className="btn btn-call-dark btn-lg"
+                >
+                  <Icon name="phone" size={17} /> Call {company.phone}
+                </a>
+              )}
             </div>
           </div>
         </div>

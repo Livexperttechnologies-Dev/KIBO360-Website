@@ -1,107 +1,157 @@
 import Seo from "../components/Seo.jsx";
 import { legalMeta, company } from "../data/siteData.js";
 
+// Page copy comes verbatim from "Terms of Use.docx"
 export default function Terms() {
   return (
     <div className="legal-page">
       <Seo
-        title="Terms & Conditions"
-        description="Terms and conditions for using kibo360.in, the website of the KIBO360 healthcare platform by Livexpert Technologies."
+        title="Terms of Use"
+        description="Terms of Use governing access to the Kibo360 website, software, applications, and related services provided by Livexpert Technologies."
         path="/terms"
       />
       <div className="container">
-        <h1>Terms &amp; Conditions</h1>
-        <p className="legal-updated">
-          Effective date: {legalMeta.effectiveDate} · Applies to {legalMeta.site} and its subdomains
-        </p>
-        <p className="legal-draft-note">
-          Draft for review — please have these terms reviewed by legal counsel before
-          production launch.
-        </p>
+        <h1>Terms of Use</h1>
+        <p className="legal-updated">Last updated: {legalMeta.effectiveDate}</p>
 
         <div className="legal-body">
-          <h2>1. Acceptance of terms</h2>
           <p>
-            By accessing {legalMeta.site} (the "Website"), operated by {legalMeta.entity}{" "}
-            ("we", "us", "our"), you agree to these Terms &amp; Conditions. If you do
-            not agree, please do not use the Website.
+            These Terms of Use govern your access to and use of the Kibo360 website,
+            software, applications, and related services provided by Livexpert
+            Technologies.
+          </p>
+          <p>
+            By accessing or using Kibo360, you agree to these Terms. If you are using
+            Kibo360 on behalf of an organisation, you confirm that you have the
+            authority to accept these Terms on its behalf.
           </p>
 
-          <h2>2. About the Website</h2>
+          <h2>1. Our Services</h2>
           <p>
-            The Website provides information about the KIBO360 platform and its
-            products, including Hospital Management Software (HMS) and Clinic
-            Management Software (CMS). Product applications offered on subdomains
-            (e.g., hms.{legalMeta.site}, cms.{legalMeta.site}) are licensed to customer
-            organizations under separate subscription and service agreements; those
-            agreements govern product use, not these Website terms.
+            Kibo360 provides business and specialised software solutions, which may
+            include hospital management, laboratory management, customer relationship
+            management, enterprise resource planning, content management, inventory
+            management, and other solutions.
+          </p>
+          <p>
+            The features, pricing, usage terms, support, and other conditions may vary
+            by product and will be set out in the applicable agreement, quotation,
+            subscription, or order form.
           </p>
 
-          <h2>3. Intellectual property</h2>
+          <h2>2. Your Account</h2>
           <p>
-            KIBO360, the KIBO360 logo, "One Platform. Every Business." and all content
-            on this Website — text, graphics, designs, product descriptions and
-            software — are the property of {legalMeta.entity} or its licensors and are
-            protected by applicable intellectual-property laws. You may not reproduce,
-            modify or distribute Website content without prior written consent.
+            You are responsible for providing accurate information and keeping your
+            account credentials secure.
+          </p>
+          <p>
+            You are also responsible for activity carried out through your account and
+            must notify us if you suspect unauthorised access.
           </p>
 
-          <h2>4. Acceptable use</h2>
+          <h2>3. Acceptable Use</h2>
+          <p>You agree to use Kibo360 only for lawful purposes.</p>
+          <p>You must not:</p>
           <ul>
-            <li>Do not misuse the Website, attempt unauthorized access, or disrupt its operation.</li>
-            <li>Do not use the Website to transmit unlawful, harmful or misleading material.</li>
-            <li>Do not scrape, copy or republish content for commercial purposes without consent.</li>
+            <li>Access or attempt to access systems or accounts without authorisation</li>
+            <li>Misuse, disrupt, or damage the services</li>
+            <li>Upload malicious code or harmful content</li>
+            <li>Copy, modify, reverse engineer, or redistribute the software without permission</li>
+            <li>Use the services to violate applicable laws or another person's rights</li>
+            <li>Circumvent security or access controls</li>
           </ul>
-
-          <h2>5. Information accuracy</h2>
           <p>
-            Product statistics, features and screenshots shown on the Website are
-            illustrative and may vary by deployment, configuration and version. We may
-            change, update or discontinue any content or feature at any time without
-            notice.
+            We may suspend or restrict access if we reasonably believe these Terms
+            have been violated or continued use creates a security or legal risk.
           </p>
 
-          <h2>6. Enquiries and demo requests</h2>
+          <h2>4. Customer Data</h2>
           <p>
-            Submitting an enquiry does not create any contractual relationship.
-            Commercial terms for any KIBO360 product are established only through a
-            signed agreement between {legalMeta.entity} and the customer organization.
+            You retain ownership of the data you provide through Kibo360. You are
+            responsible for ensuring that you have the necessary rights and
+            permissions to collect, use, and provide that data to Kibo360.
+          </p>
+          <p>
+            We process customer data only as necessary to provide and support the
+            applicable services and in accordance with our Privacy Policy and
+            applicable agreements.
+          </p>
+          <p>
+            For healthcare or other sensitive information, customers remain
+            responsible for complying with applicable laws and obtaining any required
+            permissions or consent.
           </p>
 
-          <h2>7. Disclaimer of warranties</h2>
+          <h2>5. Fees and Payments</h2>
           <p>
-            The Website is provided on an "as is" and "as available" basis without
-            warranties of any kind, express or implied, including fitness for a
-            particular purpose or uninterrupted availability.
+            Paid services are subject to the pricing, billing, renewal, cancellation,
+            and payment terms agreed with you.
+          </p>
+          <p>
+            Failure to make required payments may result in suspension or termination
+            of the applicable service.
           </p>
 
-          <h2>8. Limitation of liability</h2>
+          <h2>6. Intellectual Property</h2>
           <p>
-            To the maximum extent permitted by law, {legalMeta.entity} shall not be
-            liable for any indirect, incidental or consequential damages arising from
-            the use of, or inability to use, this Website.
+            Kibo360 and its licensors own all rights to the Kibo360 software, website,
+            technology, designs, content, trademarks, and branding.
+          </p>
+          <p>
+            Your use of Kibo360 does not transfer ownership of any Kibo360
+            intellectual property to you.
           </p>
 
-          <h2>9. Indemnity</h2>
+          <h2>7. Service Availability</h2>
           <p>
-            You agree to indemnify {legalMeta.entity} against claims arising from your
-            breach of these terms or misuse of the Website.
+            We aim to keep Kibo360 reliable and available, but we do not guarantee
+            uninterrupted or error-free service.
+          </p>
+          <p>
+            We may update, modify, or discontinue features from time to time as our
+            products evolve.
           </p>
 
-          <h2>10. Termination</h2>
+          <h2>8. Suspension and Termination</h2>
           <p>
-            We may restrict or terminate access to the Website for conduct that
-            violates these terms or applicable law.
+            We may suspend or terminate access if you materially breach these Terms,
+            fail to make required payments, create a security or legal risk, or where
+            required by law.
+          </p>
+          <p>
+            After termination, access to the applicable services will end in
+            accordance with the relevant agreement and applicable data retention or
+            deletion requirements.
           </p>
 
-          <h2>11. Governing law and jurisdiction</h2>
+          <h2>9. Disclaimer and Liability</h2>
           <p>
-            These terms are governed by the laws of India. Courts at Gautam Buddha
-            Nagar (Noida), Uttar Pradesh shall have exclusive jurisdiction over any
-            disputes.
+            Kibo360 is provided on an &ldquo;as available&rdquo; basis to the extent
+            permitted by law.
+          </p>
+          <p>
+            We do not guarantee that the services will always meet every specific
+            requirement or operate without interruption or errors.
+          </p>
+          <p>
+            To the extent permitted by law, Kibo360 will not be liable for indirect or
+            consequential losses arising from your use of or inability to use the
+            services.
+          </p>
+          <p>Nothing in these Terms limits liability that cannot legally be limited.</p>
+
+          <h2>10. Changes to These Terms</h2>
+          <p>
+            We may update these Terms from time to time. The updated version will be
+            published on this page with a revised &ldquo;Last Updated&rdquo; date.
+          </p>
+          <p>
+            Your continued use of Kibo360 after the updated Terms take effect means
+            you accept the revised Terms, where permitted by law.
           </p>
 
-          <h2>12. Contact</h2>
+          <h2>11. Contact Us</h2>
+          <p>For questions about these Terms, contact us at:</p>
           <p>
             {legalMeta.entity}, {company.address} ·{" "}
             <a href={`mailto:${company.email}`}>{company.email}</a> · {company.phone}

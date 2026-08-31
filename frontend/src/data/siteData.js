@@ -10,7 +10,7 @@ export const company = {
   motto: "Connecting Care. Empowering Life.",
   poweredBy: "Livexpert Technologies",
   website: "www.kibo360.in",
-  address: "Bhutani Cyber Park, Block C, Sector 62, Noida - 201309, India",
+  address: "Bhutani Cyber Park, Block C, Sector 62, Noida - 201305, India",
   phone: "+91-800 800 5672",
   email: "info@livexperttechnologies.com",
 };
@@ -654,7 +654,7 @@ export const images = {
 // ---------------------------------------------------------------------------
 
 export const legalMeta = {
-  effectiveDate: "17 July 2026",
+  effectiveDate: "31 August 2026",
   entity: "Livexpert Technologies",
   site: "kibo360.in",
 };

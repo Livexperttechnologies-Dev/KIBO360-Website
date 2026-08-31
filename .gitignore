@@ -9,3 +9,5 @@ build/
 *.env
 .vscode/
 .claude/
+*.docx
+KIBO360-WEBSITE-PLAN.md
