@@ -603,12 +603,14 @@ function SettingsTab({ token, notify, section }) {
   // Free-typing text for the comma-separated list; parsed only on save so
   // typing a comma is never "eaten" by re-normalization.
   const [teamText, setTeamText] = useState("");
+  const [quickText, setQuickText] = useState("");
   const [testing, setTesting] = useState(false);
   useEffect(() => {
     api("/api/admin/settings", { token })
       .then((d) => {
         setSettings(d.settings);
         setTeamText((d.settings?.notifications?.teamEmails || []).join(", "));
+        setQuickText((d.settings?.chatbot?.quickReplies || []).join(", "));
       })
       .catch((e) => notify(e.message));
   }, [token, notify]);
@@ -621,10 +623,14 @@ function SettingsTab({ token, notify, section }) {
     if (section === "notifications") {
       payload.teamEmails = teamText.split(",").map((s) => s.trim()).filter(Boolean);
     }
+    if (section === "chatbot") {
+      payload.quickReplies = quickText.split(",").map((s) => s.trim()).filter(Boolean);
+    }
     return api("/api/admin/settings", { method: "PUT", body: { [section]: payload }, token })
       .then((d) => {
         setSettings(d.settings);
         setTeamText((d.settings?.notifications?.teamEmails || value.teamEmails || []).join(", "));
+        setQuickText((d.settings?.chatbot?.quickReplies || []).join(", "));
         notify("Saved. The website picks this up immediately.");
       })
       .catch((e) => notify(e.message));
@@ -662,6 +668,16 @@ function SettingsTab({ token, notify, section }) {
   if (section === "chatbot") {
     const faqs = value.customFaqs || [];
     const setFaq = (i, patch) => update({ customFaqs: faqs.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
+    const intents = value.intents || [];
+    const setIntent = (i, patch) => update({ intents: intents.map((it, j) => (j === i ? { ...it, ...patch } : it)) });
+    const nudges = value.nudges || [];
+    const setNudge = (i, patch) => update({ nudges: nudges.map((n, j) => (j === i ? { ...n, ...patch } : n)) });
+    const restoreIntents = () => {
+      if (!window.confirm("Replace all built-in answers with the original defaults? Your edits to this list will be lost.")) return;
+      api("/api/admin/settings", { method: "PUT", body: { chatbot: { intents: null } }, token })
+        .then((d) => { setSettings(d.settings); notify("Default answers restored."); })
+        .catch((e) => notify(e.message));
+    };
     return (
       <div className="admin-card">
         <h2>Chatbot</h2>
@@ -671,8 +687,70 @@ function SettingsTab({ token, notify, section }) {
         </label>
         <label>Bot name<input value={value.botName} onChange={(e) => update({ botName: e.target.value })} /></label>
         <label>Welcome message<textarea rows="2" value={value.welcome} onChange={(e) => update({ welcome: e.target.value })} /></label>
+        <label>
+          Quick reply buttons (comma separated)
+          <input value={quickText} onChange={(e) => setQuickText(e.target.value)} placeholder="Our Products, Book a Demo, HMS, CMS" />
+        </label>
+
+        <h3>Built-in Answers</h3>
+        <p className="muted">
+          Everything the bot replies automatically. It picks the first answer whose keywords appear in the visitor's
+          message. Edit any text below - buttons shown with an answer are listed under it.
+        </p>
+        {intents.map((it, i) => (
+          <div key={it.id || i} className="admin-faq-row">
+            <input placeholder="Keywords (comma separated)" value={it.keywords || ""} onChange={(e) => setIntent(i, { keywords: e.target.value })} />
+            <div>
+              <textarea rows="3" placeholder="Answer" value={it.answer || ""} onChange={(e) => setIntent(i, { answer: e.target.value })} />
+              {it.actions?.length > 0 && (
+                <div className="intent-actions">
+                  {it.actions.map((a) => <span key={a.label}>{a.label}</span>)}
+                </div>
+              )}
+            </div>
+            <button type="button" className="admin-del" aria-label="Delete answer" onClick={() => update({ intents: intents.filter((_, j) => j !== i) })}>
+              <Icon name="close" size={14} strokeWidth={2.4} />
+            </button>
+          </div>
+        ))}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-outline" onClick={() => update({ intents: [...intents, { id: `custom-${Date.now()}`, keywords: "", answer: "", actions: [] }] })}>
+            + Add Answer
+          </button>
+          <button type="button" className="btn btn-outline" onClick={restoreIntents}>Restore Default Answers</button>
+        </div>
+
+        <h3>When the Bot Doesn't Know</h3>
+        <label>
+          Fallback reply (support options are offered automatically)
+          <textarea rows="3" value={value.fallback || ""} onChange={(e) => update({ fallback: e.target.value })} />
+        </label>
+
+        <h3>Auto Popup</h3>
+        <p className="muted">
+          When a visitor stays on one page this long, the bot opens by itself with a page-specific message
+          (once per visit). The first rule whose page path matches wins; otherwise the default message is used.
+        </p>
+        <label style={{ maxWidth: 260 }}>
+          Seconds before the bot pops up
+          <input type="number" min="5" max="600" value={value.nudgeSeconds ?? 30} onChange={(e) => update({ nudgeSeconds: e.target.value })} />
+        </label>
+        <label>Default popup message<textarea rows="2" value={value.nudgeDefault || ""} onChange={(e) => update({ nudgeDefault: e.target.value })} /></label>
+        {nudges.map((n, i) => (
+          <div key={i} className="admin-faq-row">
+            <input placeholder="Page path (e.g. /products/hms)" value={n.path || ""} onChange={(e) => setNudge(i, { path: e.target.value })} />
+            <textarea rows="2" placeholder="Popup message for this page" value={n.text || ""} onChange={(e) => setNudge(i, { text: e.target.value })} />
+            <button type="button" className="admin-del" aria-label="Delete popup rule" onClick={() => update({ nudges: nudges.filter((_, j) => j !== i) })}>
+              <Icon name="close" size={14} strokeWidth={2.4} />
+            </button>
+          </div>
+        ))}
+        <button type="button" className="btn btn-outline" onClick={() => update({ nudges: [...nudges, { path: "", text: "" }] })}>
+          + Add Page Rule
+        </button>
+
         <h3>Custom Q&amp;A</h3>
-        <p className="muted">The bot already answers questions about products, demos, pricing, contact and certifications. Add your own answers here - matched when a visitor's message contains any keyword.</p>
+        <p className="muted">Extra answers on top of the built-in ones - matched first when a visitor's message contains any keyword.</p>
         {faqs.map((f, i) => (
           <div key={i} className="admin-faq-row">
             <input placeholder="Keywords (comma separated)" value={f.keywords || ""} onChange={(e) => setFaq(i, { keywords: e.target.value })} />

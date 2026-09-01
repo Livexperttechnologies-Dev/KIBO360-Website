@@ -20,7 +20,13 @@ const DEFAULT_CONFIG = {
     enabled: true,
     botName: "Kibo Assistant",
     welcome: "Hi! I'm the Kibo360 assistant. Ask me about our products, demos or support - or pick an option below.",
+    quickReplies: null, // null -> built-in QUICK_REPLIES
+    fallback: null,     // null -> built-in fallback text
+    intents: null,      // null -> built-in INTENTS
     customFaqs: [],
+    nudgeSeconds: 30,
+    nudgeDefault: null,
+    nudges: null,
   },
 };
 
@@ -97,17 +103,29 @@ const INTENTS = [
   },
 ];
 
-function matchIntent(text, customFaqs) {
+// Admin-managed intents (settings.chatbot.intents) take priority; the built-in
+// INTENTS above are only the offline fallback when the backend is unreachable.
+function matchIntent(text, chatbot) {
   const q = text.toLowerCase();
-  for (const f of customFaqs || []) {
+  for (const f of chatbot.customFaqs || []) {
     const kws = String(f.keywords || f.q || "").toLowerCase().split(",").map((k) => k.trim()).filter(Boolean);
     if (kws.some((k) => k && q.includes(k))) return { answer: f.a, actions: [] };
   }
-  for (const intent of INTENTS) {
+  const intents = chatbot.intents?.length
+    ? chatbot.intents.map((i) => ({
+        keywords: Array.isArray(i.keywords)
+          ? i.keywords
+          : String(i.keywords || "").toLowerCase().split(",").map((k) => k.trim()).filter(Boolean),
+        answer: i.answer,
+        actions: i.actions || [],
+      }))
+    : INTENTS;
+  for (const intent of intents) {
     if (intent.keywords.some((k) => q.includes(k))) return intent;
   }
   return {
     answer:
+      chatbot.fallback ||
       "I'm not sure about that one - but our team will know! Your message has been shared with our support team, and you can also book a demo, message us on WhatsApp, or call us.",
     actions: [
       { label: "Talk to Support (WhatsApp)", type: "wa" },
@@ -302,19 +320,23 @@ export default function FloatingWidgets() {
   // chats with us, has the panel open, or the demo popup is showing.
   useEffect(() => {
     if (!config.chatbot.enabled) return undefined;
+    const delayMs = Math.max(5, Number(config.chatbot.nudgeSeconds) || 30) * 1000;
     const t = setTimeout(() => {
       try { if (sessionStorage.getItem("kibo360-bot-nudged") === "1") return; } catch { /* ignore */ }
       if (openRef.current || startedRef.current || document.querySelector(".modal-overlay")) return;
       try { sessionStorage.setItem("kibo360-bot-nudged", "1"); } catch { /* ignore */ }
-      const nudge = NUDGES.find((n) => pathname.startsWith(n.path))?.text || NUDGE_DEFAULT;
+      const rules = config.chatbot.nudges?.length ? config.chatbot.nudges : NUDGES;
+      const nudge =
+        rules.find((n) => n.path && pathname.startsWith(n.path))?.text ||
+        config.chatbot.nudgeDefault || NUDGE_DEFAULT;
       setMessages((m) => [
         ...m,
         { from: "bot", text: nudge, actions: [{ label: "Book a Free Demo", type: "demo" }] },
       ]);
       setOpen(true);
-    }, 30000);
+    }, delayMs);
     return () => clearTimeout(t);
-  }, [pathname, config.chatbot.enabled]);
+  }, [pathname, config.chatbot]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
@@ -366,10 +388,12 @@ export default function FloatingWidgets() {
     const joined = synced ? !!synced.agentJoined : agentJoined;
     if (synced) { setAgentJoined(joined); setAgentOnline(!!synced.agentOnline); }
     if (joined) return; // a human agent has this conversation - let them answer
-    const reply = matchIntent(clean, config.chatbot.customFaqs);
+    const reply = matchIntent(clean, config.chatbot);
     setMessages((m) => [...m, { from: "bot", text: reply.answer, actions: reply.actions }]);
     syncMessage("bot", reply.answer);
   };
+
+  const quickReplies = config.chatbot.quickReplies?.length ? config.chatbot.quickReplies : QUICK_REPLIES;
 
   return (
     <>
@@ -435,7 +459,7 @@ export default function FloatingWidgets() {
                   </div>
                 ))}
                 <div className="chat-quick">
-                  {QUICK_REPLIES.map((q) => (
+                  {quickReplies.map((q) => (
                     <button key={q} type="button" onClick={() => send(q)}>{q}</button>
                   ))}
                 </div>

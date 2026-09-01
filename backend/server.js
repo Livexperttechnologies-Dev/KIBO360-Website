@@ -34,6 +34,103 @@ function writeJson(file, value) {
   fs.renameSync(tmp, file);
 }
 
+// Every text the chatbot sends lives here so the admin console can change it
+// without a code deploy. Buttons: type "demo" opens the demo form, "link" goes
+// to href, "wa" opens WhatsApp, "tel" calls the phone number.
+const DEFAULT_INTENTS = [
+  {
+    id: "greeting",
+    keywords: "hello, hi, hey, namaste, good morning, good afternoon, good evening",
+    answer: "Hello! How can I help you today? You can ask about our products, book a demo, or talk to our support team.",
+    actions: [],
+  },
+  {
+    id: "products",
+    keywords: "product, solution, software, what do you, offer, our products",
+    answer:
+      "Kibo360 brings business software together on one platform:\n• HMS - Hospital Management Software (live)\n• CMS - Clinic Management Software (live)\n• ERP, CRM, LIS and Inventory - coming soon\n\nEverything shares one intelligent database, so you can add products as you grow.",
+    actions: [{ label: "View All Products", type: "link", href: "/products" }],
+  },
+  {
+    id: "hms",
+    keywords: "hms, hospital",
+    answer:
+      "KIBO360 HMS runs your whole hospital - OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance, HR & payroll and AI analytics on one intelligent database, with ABHA health ID support built in.",
+    actions: [
+      { label: "Explore HMS", type: "link", href: "/products/hms" },
+      { label: "Book a Demo", type: "demo" },
+    ],
+  },
+  {
+    id: "cms",
+    keywords: "cms, clinic",
+    answer:
+      "KIBO360 CMS is built for clinics - appointments, queue & token, doctor EMR, e-prescriptions, GST billing, pharmacy and WhatsApp reminders. Live in days, and it upgrades to full HMS without any data migration.",
+    actions: [
+      { label: "Explore CMS", type: "link", href: "/products/cms" },
+      { label: "Book a Demo", type: "demo" },
+    ],
+  },
+  {
+    id: "pricing",
+    keywords: "price, pricing, cost, charges, fees, quote, subscription",
+    answer:
+      "Pricing depends on your facility size and the modules you need. Book a free demo and our team will prepare a quote tailored to you - usually within one business day.",
+    actions: [{ label: "Book a Free Demo", type: "demo" }],
+  },
+  {
+    id: "demo",
+    keywords: "demo, book, trial, see it",
+    answer: "Happy to set that up! Click below and tell us a little about your facility - we respond within one business day.",
+    actions: [{ label: "Book a Free Demo", type: "demo" }],
+  },
+  {
+    id: "support",
+    keywords: "contact, support, help, talk, human, agent, team, call, phone, email",
+    answer:
+      "You can reach our team directly:\n• Call +91-800 800 5672\n• Email info@livexperttechnologies.com\n• Or chat with us on WhatsApp\n\nYou can also just keep typing here - our support team sees this chat and can jump in.",
+    actions: [
+      { label: "WhatsApp Us", type: "wa" },
+      { label: "Call +91-800 800 5672", type: "tel" },
+      { label: "Send a Message", type: "demo" },
+    ],
+  },
+  {
+    id: "certifications",
+    keywords: "certif, iso, cmmi, quality",
+    answer:
+      "Livexpert Technologies is ISO 9001:2015 certified (Quality Management Systems) and appraised at CMMI Level 3. Kibo360 also holds ABHA certification.",
+    actions: [{ label: "About Us", type: "link", href: "/about" }],
+  },
+  {
+    id: "security",
+    keywords: "abha, compliance, secure, security, data",
+    answer:
+      "Kibo360 is ABHA certified, and your data is protected with AES-256 encryption, role-based access, two-factor authentication, audit logs and disaster recovery.",
+    actions: [],
+  },
+  {
+    id: "address",
+    keywords: "address, location, office, where",
+    answer: "We're at Bhutani Cyber Park, Block C, Sector 62, Noida - 201305, India.",
+    actions: [],
+  },
+  {
+    id: "thanks",
+    keywords: "thank, thanks, great, ok, okay",
+    answer: "You're welcome! Anything else I can help with?",
+    actions: [],
+  },
+];
+
+const DEFAULT_NUDGES = [
+  { path: "/products/hms", text: "I see you're exploring KIBO360 HMS! Can I answer anything - modules, pricing, or how it fits your hospital?" },
+  { path: "/products/cms", text: "Looking at our Clinical Management System? Happy to answer anything - features, pricing, or how fast your clinic can go live." },
+  { path: "/products", text: "Looking for the right solution? Tell me a little about your organisation and I'll point you to the right product." },
+  { path: "/contact", text: "Need a hand reaching us? I can connect you with our team right here, or you can book a demo below." },
+  { path: "/about", text: "Getting to know Kibo360? Ask me anything about our platform, certifications or the team behind it." },
+];
+
 const DEFAULT_SETTINGS = {
   whatsapp: {
     enabled: true,
@@ -44,7 +141,14 @@ const DEFAULT_SETTINGS = {
     enabled: true,
     botName: "Kibo Assistant",
     welcome: "Hi! I'm the Kibo360 assistant. Ask me about our products, demos or support - or pick an option below.",
+    quickReplies: ["Our Products", "Book a Demo", "HMS", "CMS", "Contact & Support"],
+    fallback:
+      "I'm not sure about that one - but our team will know! Your message has been shared with our support team, and you can also book a demo, message us on WhatsApp, or call us.",
+    intents: DEFAULT_INTENTS,
     customFaqs: [], // [{ q, keywords, a }]
+    nudgeSeconds: 30,
+    nudgeDefault: "Welcome to Kibo360! Can I help you find the right solution for your business?",
+    nudges: DEFAULT_NUDGES,
   },
   notifications: {
     smtp: { host: "", port: 587, user: "", pass: "", from: "" },
@@ -64,7 +168,13 @@ const SUPER_ADMIN_EMAIL = "livexperttechnologies@gmail.com";
 function loadSettings() {
   const s = readJson(SETTINGS_FILE, null);
   if (!s) { writeJson(SETTINGS_FILE, DEFAULT_SETTINGS); return { ...DEFAULT_SETTINGS }; }
-  return { ...DEFAULT_SETTINGS, ...s };
+  // Merge per section so settings saved before a field existed still pick up
+  // its default (e.g. chatbot.intents added after settings.json was written).
+  const out = {};
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    out[key] = { ...DEFAULT_SETTINGS[key], ...(s[key] || {}) };
+  }
+  return out;
 }
 function loadUsers() {
   let users = readJson(USERS_FILE, null);
@@ -187,7 +297,13 @@ app.get("/api/settings", (_req, res) => {
       enabled: s.chatbot.enabled,
       botName: s.chatbot.botName,
       welcome: s.chatbot.welcome,
+      quickReplies: s.chatbot.quickReplies || [],
+      fallback: s.chatbot.fallback,
+      intents: (s.chatbot.intents || []).map(({ id, keywords, answer, actions }) => ({ id, keywords, answer, actions })),
       customFaqs: (s.chatbot.customFaqs || []).map(({ q, keywords, a }) => ({ q, keywords, a })),
+      nudgeSeconds: s.chatbot.nudgeSeconds,
+      nudgeDefault: s.chatbot.nudgeDefault,
+      nudges: (s.chatbot.nudges || []).map(({ path: p, text }) => ({ path: p, text })),
     },
   });
 });
@@ -302,6 +418,18 @@ app.put("/api/admin/settings", requireAuth(), (req, res) => {
       return res.status(403).json({ ok: false, error: `No access to ${key} settings` });
     }
     settings[key] = { ...settings[key], ...patch[key] };
+  }
+  // Chatbot content: null means "restore the defaults"; arrays are capped so
+  // a bad save can't bloat the settings file.
+  if (patch.chatbot) {
+    if (patch.chatbot.intents === null) settings.chatbot.intents = DEFAULT_INTENTS;
+    else if (Array.isArray(patch.chatbot.intents)) settings.chatbot.intents = patch.chatbot.intents.slice(0, 60);
+    if (patch.chatbot.nudges === null) settings.chatbot.nudges = DEFAULT_NUDGES;
+    else if (Array.isArray(patch.chatbot.nudges)) settings.chatbot.nudges = patch.chatbot.nudges.slice(0, 40);
+    if (Array.isArray(patch.chatbot.quickReplies)) settings.chatbot.quickReplies = patch.chatbot.quickReplies.slice(0, 12);
+    if (patch.chatbot.nudgeSeconds !== undefined) {
+      settings.chatbot.nudgeSeconds = Math.min(600, Math.max(5, Number(patch.chatbot.nudgeSeconds) || 30));
+    }
   }
   // An empty password from the form means "keep the saved one"
   if (patch.notifications?.smtp) {
