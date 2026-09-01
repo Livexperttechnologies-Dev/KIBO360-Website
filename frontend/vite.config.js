@@ -5,8 +5,4 @@ import react from "@vitejs/plugin-react";
 // All /api calls are proxied to the KIBO360 backend on port 5001.
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 3001,
-    strictPort: true,
-  },
 });
