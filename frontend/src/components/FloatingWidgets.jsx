@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon.jsx";
 import { useDemoModal } from "./DemoModalContext.jsx";
 import { company } from "../data/siteData.js";
+import { API_BASE } from "../lib/apiBase.js";
 
 // ---------------------------------------------------------------------------
-// Floating WhatsApp button (bottom-left) + auto-answer chatbot (bottom-right).
-// Config comes from https://api.kibo360.in/api/settings (managed in the admin panel); sensible
+// Floating WhatsApp button (bottom-left) + chatbot (bottom-right).
+// The bot answers instantly from built-in knowledge; every conversation is
+// also synced to the backend so support users can watch and reply live from
+// the admin console. Once a human agent replies, the auto-bot steps aside.
+// Config comes from /api/settings (managed in the admin panel); sensible
 // defaults apply when the backend is unreachable.
 // ---------------------------------------------------------------------------
 
@@ -36,7 +40,7 @@ const INTENTS = [
   {
     keywords: ["hms", "hospital"],
     answer:
-      "KIBO360 HMS runs your whole hospital - OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance, HR & payroll and AI analytics on one intelligent database. It's ABDM/ABHA-ready with NABH-aligned workflows.",
+      "KIBO360 HMS runs your whole hospital - OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance, HR & payroll and AI analytics on one intelligent database, with ABHA health ID support built in.",
     actions: [
       { label: "Explore HMS", type: "link", href: "/products/hms" },
       { label: "Book a Demo", type: "demo" },
@@ -64,7 +68,7 @@ const INTENTS = [
   },
   {
     keywords: ["contact", "support", "help", "talk", "human", "agent", "team", "call", "phone", "email"],
-    answer: `You can reach our team directly:\n• Call ${company.phone}\n• Email ${company.email}\n• Or chat with us on WhatsApp`,
+    answer: `You can reach our team directly:\n• Call ${company.phone}\n• Email ${company.email}\n• Or chat with us on WhatsApp\n\nYou can also just keep typing here - our support team sees this chat and can jump in.`,
     actions: [
       { label: "WhatsApp Us", type: "wa" },
       { label: `Call ${company.phone}`, type: "tel" },
@@ -74,13 +78,13 @@ const INTENTS = [
   {
     keywords: ["certif", "iso", "cmmi", "quality"],
     answer:
-      "Livexpert Technologies is ISO 9001:2015 certified (Quality Management Systems) and appraised at CMMI Level 3. Kibo360 also holds ABHA certification under the Ayushman Bharat Digital Mission.",
+      "Livexpert Technologies is ISO 9001:2015 certified (Quality Management Systems) and appraised at CMMI Level 3. Kibo360 also holds ABHA certification.",
     actions: [{ label: "About Us", type: "link", href: "/about" }],
   },
   {
-    keywords: ["abdm", "abha", "nabh", "dpdp", "compliance", "secure", "security", "data"],
+    keywords: ["abha", "compliance", "secure", "security", "data"],
     answer:
-      "Kibo360 is ABDM/ABHA-ready with NABH-aligned workflows, and data handling aligned with India's DPDP Act 2023 - AES-256 encryption, role-based access, 2FA, audit logs and disaster recovery.",
+      "Kibo360 is ABHA certified, and your data is protected with AES-256 encryption, role-based access, two-factor authentication, audit logs and disaster recovery.",
   },
   {
     keywords: ["address", "location", "office", "where"],
@@ -103,13 +107,26 @@ function matchIntent(text, customFaqs) {
   }
   return {
     answer:
-      "I'm not sure about that one - but our team will know! You can book a demo, message us on WhatsApp, or call us and we'll help right away.",
+      "I'm not sure about that one - but our team will know! Your message has been shared with our support team, and you can also book a demo, message us on WhatsApp, or call us.",
     actions: [
       { label: "Talk to Support (WhatsApp)", type: "wa" },
       { label: "Book a Demo", type: "demo" },
       { label: `Call ${company.phone}`, type: "tel" },
     ],
   };
+}
+
+function getVisitorId() {
+  try {
+    let id = localStorage.getItem("kibo360-visitor-id");
+    if (!id || !/^[a-z0-9-]{10,64}$/i.test(id)) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : `v-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`);
+      localStorage.setItem("kibo360-visitor-id", id);
+    }
+    return id;
+  } catch {
+    return `v-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
 }
 
 function WhatsAppGlyph({ size = 26 }) {
@@ -123,13 +140,36 @@ function WhatsAppGlyph({ size = 26 }) {
 export default function FloatingWidgets() {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([]); // {from:"bot"|"user", text, actions?}
+  const [messages, setMessages] = useState([]); // {from:"bot"|"user"|"agent", text, name?, actions?}
   const [input, setInput] = useState("");
+  const [unread, setUnread] = useState(0);
+  const [agentOnline, setAgentOnline] = useState(false);
+  const [agentJoined, setAgentJoined] = useState(false);
   const { openDemo } = useDemoModal();
   const bodyRef = useRef(null);
+  const visitorIdRef = useRef(getVisitorId());
+  // Cursor = how many server messages we've already seen. Persisted so a page
+  // reload doesn't re-count the whole history as "new" (phantom unread badge).
+  const cursorRef = useRef((() => {
+    try { const v = Number(localStorage.getItem("kibo360-chat-cursor")); return Number.isFinite(v) && v > 0 ? v : 0; } catch { return 0; }
+  })());
+  const cursorKnownRef = useRef(cursorRef.current > 0);
+  const startedRef = useRef(false);     // does a server-side chat session exist?
+  const openRef = useRef(false);
+  const historyLoadedRef = useRef(false);
+  const pollBusyRef = useRef(false);
+  const pendingRef = useRef([]);        // messages that failed to sync, retried later
+
+  const setCursor = (n) => {
+    cursorRef.current = n;
+    cursorKnownRef.current = true;
+    try { localStorage.setItem("kibo360-chat-cursor", String(n)); } catch { /* ignore */ }
+  };
+
+  useEffect(() => { openRef.current = open; }, [open]);
 
   useEffect(() => {
-    fetch("https://api.kibo360.in/api/settings")
+    fetch(`${API_BASE}/api/settings`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.ok) setConfig({ whatsapp: { ...DEFAULT_CONFIG.whatsapp, ...d.whatsapp }, chatbot: { ...DEFAULT_CONFIG.chatbot, ...d.chatbot } });
@@ -137,17 +177,125 @@ export default function FloatingWidgets() {
       .catch(() => { /* offline: keep defaults */ });
   }, []);
 
+  // Presence heartbeat: lets the team see live visitors (count, page, location)
   useEffect(() => {
-    if (open && messages.length === 0) {
-      setMessages([{ from: "bot", text: config.chatbot.welcome }]);
+    try { startedRef.current = localStorage.getItem("kibo360-chat-started") === "1"; } catch { /* ignore */ }
+    const ping = () => {
+      fetch(`${API_BASE}/api/presence/ping`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitorId: visitorIdRef.current, page: window.location.pathname }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d?.ok) setAgentOnline(!!d.agentOnline); })
+        .catch(() => { /* offline */ });
+    };
+    ping();
+    const iv = setInterval(ping, 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Pull new messages from the server (agent replies appear here)
+  useEffect(() => {
+    if (!startedRef.current && !open) return undefined;
+    const poll = () => {
+      if (!startedRef.current || pollBusyRef.current || (open && !historyLoadedRef.current)) return;
+      pollBusyRef.current = true;
+      const requestAfter = cursorRef.current;
+      fetch(`${API_BASE}/api/chat/messages?visitorId=${encodeURIComponent(visitorIdRef.current)}&after=${requestAfter}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d?.ok) return;
+          // Discard stale responses: something else (send, restore) moved the
+          // cursor while this request was in flight.
+          if (cursorRef.current !== requestAfter) return;
+          setAgentOnline(!!d.agentOnline);
+          setAgentJoined(!!d.agentJoined);
+          const baseline = !cursorKnownRef.current && requestAfter === 0;
+          setCursor(d.total);
+          if (baseline) return; // first contact after an update/clear: don't replay history
+          const fresh = (d.messages || []).filter((m) => m.from === "agent");
+          if (fresh.length > 0) {
+            setMessages((m) => [...m, ...fresh.map((f) => ({ from: "agent", name: f.name, text: f.text }))]);
+            if (!openRef.current) setUnread((u) => u + fresh.length);
+          }
+        })
+        .catch(() => { /* offline */ })
+        .finally(() => { pollBusyRef.current = false; flushPending(); });
+    };
+    poll();
+    const iv = setInterval(poll, open ? 3500 : 12000);
+    return () => clearInterval(iv);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restore the conversation after a reload so the thread continues
+  useEffect(() => {
+    if (!open || historyLoadedRef.current) return;
+    if (!startedRef.current) {
+      historyLoadedRef.current = true;
+      setMessages((m) => (m.length === 0 ? [{ from: "bot", text: config.chatbot.welcome }] : m));
+      return;
     }
-  }, [open, messages.length, config.chatbot.welcome]);
+    const fallback = () => {
+      historyLoadedRef.current = false; // retry on the next open
+      setMessages((m) => (m.length === 0 ? [{ from: "bot", text: config.chatbot.welcome }] : m));
+    };
+    historyLoadedRef.current = true;
+    fetch(`${API_BASE}/api/chat/messages?visitorId=${encodeURIComponent(visitorIdRef.current)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.ok) { fallback(); return; }
+        setCursor(d.total);
+        setAgentJoined(!!d.agentJoined);
+        setAgentOnline(!!d.agentOnline);
+        const restored = (d.messages || []).map((m) => ({
+          from: m.from === "visitor" ? "user" : m.from,
+          name: m.name,
+          text: m.text,
+        }));
+        setMessages([{ from: "bot", text: config.chatbot.welcome }, ...restored]);
+      })
+      .catch(fallback);
+  }, [open, config.chatbot.welcome]);
+
+  useEffect(() => {
+    if (open) setUnread(0);
+  }, [open]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, open]);
 
   const waHref = `https://wa.me/${config.whatsapp.number}?text=${encodeURIComponent(config.whatsapp.greeting)}`;
+
+  const postMessage = (from, text) =>
+    fetch(`${API_BASE}/api/chat/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visitorId: visitorIdRef.current, from, text, page: window.location.pathname }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+  const syncMessage = async (from, text) => {
+    startedRef.current = true;
+    try { localStorage.setItem("kibo360-chat-started", "1"); } catch { /* ignore */ }
+    const d = await postMessage(from, text);
+    if (!d) {
+      // Backend unreachable or throttled: queue so support still gets it later
+      if (pendingRef.current.length < 20) pendingRef.current.push({ from, text });
+    }
+    return d;
+  };
+
+  const flushPending = async () => {
+    while (pendingRef.current.length > 0) {
+      const next = pendingRef.current[0];
+      const d = await postMessage(next.from, next.text); // eslint-disable-line no-await-in-loop
+      if (!d) return; // still down - keep the queue for the next poll tick
+      pendingRef.current.shift();
+    }
+  };
 
   const runAction = (a) => {
     if (a.type === "demo") { setOpen(false); openDemo(); }
@@ -156,16 +304,18 @@ export default function FloatingWidgets() {
     else if (a.type === "link") { window.location.href = a.href; }
   };
 
-  const send = (text) => {
+  const send = async (text) => {
     const clean = String(text || "").trim();
     if (!clean) return;
-    const reply = matchIntent(clean, config.chatbot.customFaqs);
-    setMessages((m) => [
-      ...m,
-      { from: "user", text: clean },
-      { from: "bot", text: reply.answer, actions: reply.actions },
-    ]);
+    setMessages((m) => [...m, { from: "user", text: clean }]);
     setInput("");
+    const synced = await syncMessage("visitor", clean);
+    const joined = synced ? !!synced.agentJoined : agentJoined;
+    if (synced) { setAgentJoined(joined); setAgentOnline(!!synced.agentOnline); }
+    if (joined) return; // a human agent has this conversation - let them answer
+    const reply = matchIntent(clean, config.chatbot.customFaqs);
+    setMessages((m) => [...m, { from: "bot", text: reply.answer, actions: reply.actions }]);
+    syncMessage("bot", reply.answer);
   };
 
   return (
@@ -193,6 +343,7 @@ export default function FloatingWidgets() {
             onClick={() => setOpen((o) => !o)}
           >
             <Icon name={open ? "close" : "message"} size={24} strokeWidth={1.9} />
+            {unread > 0 && !open && <span className="float-unread" aria-label={`${unread} new messages`}>{unread}</span>}
           </button>
 
           {open && (
@@ -201,7 +352,13 @@ export default function FloatingWidgets() {
                 <span className="chatbot-avatar"><Icon name="cpu" size={18} /></span>
                 <div>
                   <strong>{config.chatbot.botName}</strong>
-                  <span>Typically replies instantly</span>
+                  <span>
+                    {agentOnline ? (
+                      <span className="chat-live"><span className="chat-live-dot" aria-hidden="true" /> Support team online</span>
+                    ) : (
+                      "Typically replies instantly"
+                    )}
+                  </span>
                 </div>
                 <button type="button" className="chatbot-close" aria-label="Close" onClick={() => setOpen(false)}>
                   <Icon name="close" size={16} strokeWidth={2.2} />
@@ -211,6 +368,7 @@ export default function FloatingWidgets() {
               <div className="chatbot-body" ref={bodyRef}>
                 {messages.map((m, i) => (
                   <div key={i} className={`chat-msg ${m.from}`}>
+                    {m.from === "agent" && <span className="chat-agent-name">{m.name || "Support"} · Kibo360 Team</span>}
                     <p>{m.text}</p>
                     {m.actions?.length > 0 && (
                       <div className="chat-actions">

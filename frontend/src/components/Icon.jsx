@@ -148,6 +148,12 @@ const paths = {
       <path d="m3 3 18 18" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M7 9a5 5 0 0 1 10 0c0 3 1 5 2 6H5c1-1 2-3 2-6Z" />
+      <path d="M10 19a2 2 0 0 0 4 0" />
+    </>
+  ),
   calendar: (
     <>
       <rect x="4" y="5" width="16" height="16" rx="2" />

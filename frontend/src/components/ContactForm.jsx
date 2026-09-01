@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon.jsx";
 import { products } from "../data/siteData.js";
+import { API_BASE } from "../lib/apiBase.js";
 
 const initial = { name: "", email: "", phone: "", organization: "", product: "General", message: "" };
 
@@ -23,7 +24,7 @@ export default function ContactForm() {
     setStatus("sending");
     setErrors({});
     try {
-      const res = await fetch("https://api.kibo360.in/api/contact", {
+      const res = await fetch(`${API_BASE}/api/contact`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

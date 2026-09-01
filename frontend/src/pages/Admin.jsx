@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "../components/Icon.jsx";
+import { API_BASE } from "../lib/apiBase.js";
 
 // ---------------------------------------------------------------------------
 // KIBO360 Admin - leads, WhatsApp / chatbot / email-notification settings and
@@ -11,7 +12,7 @@ const TOKEN_KEY = "kibo360-admin-token";
 const USER_KEY = "kibo360-admin-user";
 
 async function api(path, { method = "GET", body, token } = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -20,15 +21,61 @@ async function api(path, { method = "GET", body, token } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && token) {
+    // Session expired (or the backend restarted - sessions are in-memory).
+    // Drop the stale token and show the login screen instead of a broken UI.
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
+    window.location.reload();
+    throw new Error("Session expired - please sign in again");
+  }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
 const PERMISSION_LABELS = {
   leads: "Leads & Forms",
+  chats: "Live Chat",
   whatsapp: "WhatsApp Setup",
   chatbot: "Chatbot Setup",
   notifications: "Email Notifications",
+};
+
+// Short alert tone via WebAudio (no asset needed); silently no-ops if blocked.
+function playBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = playBeep.ctx || (playBeep.ctx = new Ctx());
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    o.connect(g);
+    g.connect(ctx.destination);
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.start(t);
+    o.stop(t + 0.42);
+  } catch { /* audio unavailable */ }
+}
+
+function notifyBrowser(text) {
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("KIBO360 Admin", { body: text });
+    }
+  } catch { /* ignore */ }
+}
+
+const timeAgo = (iso) => {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
 };
 
 export default function Admin() {
@@ -36,11 +83,72 @@ export default function Admin() {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem(USER_KEY) || "null"); } catch { return null; }
   });
-  const [tab, setTab] = useState("leads");
+  const [tab, setTab] = useState(() => {
+    // First tab the (restored) user can actually see
+    try {
+      const u = JSON.parse(sessionStorage.getItem(USER_KEY) || "null");
+      if (!u) return "leads";
+      if (u.role === "superadmin" || u.permissions?.leads) return "leads";
+      return Object.keys(u.permissions || {}).find((k) => u.permissions[k]) || "security";
+    } catch { return "leads"; }
+  });
   const [flash, setFlash] = useState("");
+  const [summary, setSummary] = useState(null); // { unreadTotal, presenceCount }
+  const [soundOn, setSoundOn] = useState(() => {
+    try { return localStorage.getItem("kibo360-admin-sound") !== "off"; } catch { return true; }
+  });
+  const soundRef = useRef(true);
+  const prevRef = useRef({ first: true, unread: 0, presence: 0, leads: null });
 
   useEffect(() => { document.title = "KIBO360 Admin"; }, []);
-  const notify = (msg) => { setFlash(msg); setTimeout(() => setFlash(""), 3500); };
+  useEffect(() => { soundRef.current = soundOn; }, [soundOn]);
+
+  // Background watcher: any signed-in user with Live Chat access polls the
+  // chat summary. This powers the unread badge + sound/browser alerts AND
+  // tells the backend "support is online" (so offline email alerts pause).
+  useEffect(() => {
+    if (!token || !user) return undefined;
+    if (user.role !== "superadmin" && !user.permissions?.chats) return undefined;
+    prevRef.current = { first: true, unread: 0, presence: 0, leads: null }; // fresh baseline per sign-in
+    try {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch { /* ignore */ }
+    let stopped = false;
+    const tick = () => {
+      api("/api/admin/chats", { token })
+        .then((d) => {
+          if (stopped) return;
+          const presence = d.presence?.count || 0;
+          const prev = prevRef.current;
+          if (!prev.first) {
+            if (d.unreadTotal > prev.unread) {
+              if (soundRef.current) playBeep();
+              notifyBrowser("New live chat message on kibo360.in");
+            } else if (
+              presence > prev.presence ||
+              (prev.leads != null && d.leadsCount != null && d.leadsCount > prev.leads)
+            ) {
+              if (soundRef.current) playBeep();
+            }
+          }
+          prevRef.current = { first: false, unread: d.unreadTotal, presence, leads: d.leadsCount };
+          setSummary((s) =>
+            s && s.unreadTotal === d.unreadTotal && s.presenceCount === presence
+              ? s
+              : { unreadTotal: d.unreadTotal, presenceCount: presence }
+          );
+          document.title = d.unreadTotal > 0 ? `(${d.unreadTotal}) KIBO360 Admin` : "KIBO360 Admin";
+        })
+        .catch(() => { /* transient */ });
+    };
+    tick();
+    const iv = setInterval(tick, 10000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, [token, user]);
+
+  const notify = useCallback((msg) => { setFlash(msg); setTimeout(() => setFlash(""), 3500); }, []);
 
   const signOut = () => {
     sessionStorage.removeItem(TOKEN_KEY);
@@ -60,6 +168,7 @@ export default function Admin() {
   const can = (perm) => user.role === "superadmin" || !!user.permissions?.[perm];
   const tabs = [
     can("leads") && { id: "leads", label: "Leads" },
+    can("chats") && { id: "chats", label: "Live Chat" },
     can("whatsapp") && { id: "whatsapp", label: "WhatsApp" },
     can("chatbot") && { id: "chatbot", label: "Chatbot" },
     can("notifications") && { id: "notifications", label: "Email" },
@@ -76,6 +185,22 @@ export default function Admin() {
           <strong>{user.name}</strong>
           <span>{user.role === "superadmin" ? "Super Admin" : "Admin"}</span>
         </div>
+        {can("chats") && (
+          <button
+            type="button"
+            className={`admin-sound ${soundOn ? "on" : ""}`}
+            aria-pressed={soundOn}
+            title={soundOn ? "Sound alerts are on" : "Sound alerts are off"}
+            onClick={() => {
+              const next = !soundOn;
+              setSoundOn(next);
+              try { localStorage.setItem("kibo360-admin-sound", next ? "on" : "off"); } catch { /* ignore */ }
+              if (next) playBeep();
+            }}
+          >
+            <Icon name={soundOn ? "bell" : "bell-off"} size={17} />
+          </button>
+        )}
         <button type="button" className="btn btn-outline" onClick={signOut}>Sign Out</button>
       </header>
 
@@ -88,6 +213,14 @@ export default function Admin() {
             onClick={() => setTab(t.id)}
           >
             {t.label}
+            {t.id === "chats" && summary?.unreadTotal > 0 && (
+              <span className="tab-badge">{summary.unreadTotal}</span>
+            )}
+            {t.id === "chats" && summary?.presenceCount > 0 && (
+              <span className="tab-live" title={`${summary.presenceCount} visitor(s) on the site now`}>
+                {summary.presenceCount}
+              </span>
+            )}
           </button>
         ))}
       </nav>
@@ -96,6 +229,7 @@ export default function Admin() {
 
       <main className="admin-main">
         {tab === "leads" && can("leads") && <LeadsTab token={token} notify={notify} />}
+        {tab === "chats" && can("chats") && <ChatsTab token={token} notify={notify} />}
         {tab === "whatsapp" && can("whatsapp") && <SettingsTab token={token} notify={notify} section="whatsapp" />}
         {tab === "chatbot" && can("chatbot") && <SettingsTab token={token} notify={notify} section="chatbot" />}
         {tab === "notifications" && can("notifications") && <SettingsTab token={token} notify={notify} section="notifications" />}
@@ -116,7 +250,7 @@ function Login({ onSignedIn }) {
     e.preventDefault();
     setBusy(true); setError("");
     try {
-      const d = await api("https://api.kibo360.in/api/admin/login", { method: "POST", body: { email, password } });
+      const d = await api("/api/admin/login", { method: "POST", body: { email, password } });
       onSignedIn(d.token, d.user);
     } catch (err) {
       setError(err.message);
@@ -148,16 +282,16 @@ function Login({ onSignedIn }) {
 function LeadsTab({ token, notify }) {
   const [leads, setLeads] = useState(null);
   const load = useCallback(() => {
-    api("https://api.kibo360.in/api/admin/leads", { token }).then((d) => setLeads(d.leads)).catch((e) => notify(e.message));
+    api("/api/admin/leads", { token }).then((d) => setLeads(d.leads)).catch((e) => notify(e.message));
   }, [token, notify]);
   useEffect(load, [load]);
 
   const setStatus = (id, status) =>
-    api(`https://api.kibo360.in/api/admin/leads/${id}`, { method: "PATCH", body: { status }, token })
+    api(`/api/admin/leads/${id}`, { method: "PATCH", body: { status }, token })
       .then(load).catch((e) => notify(e.message));
   const remove = (id) => {
     if (!window.confirm("Delete this lead permanently?")) return;
-    api(`https://api.kibo360.in/api/admin/leads/${id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
+    api(`/api/admin/leads/${id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
   };
 
   if (!leads) return <p>Loading leads…</p>;
@@ -200,17 +334,188 @@ function LeadsTab({ token, notify }) {
   );
 }
 
+function ChatsTab({ token, notify }) {
+  const [data, setData] = useState(null);   // { chats, presence }
+  const [sel, setSel] = useState(null);     // selected chat id
+  const [thread, setThread] = useState(null);
+  const [reply, setReply] = useState("");
+  const msgsRef = useRef(null);
+
+  // Ask once for browser notification permission (used for chat alerts)
+  useEffect(() => {
+    try {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const load = useCallback(() => {
+    api("/api/admin/chats", { token })
+      .then((d) => setData({ chats: d.chats, presence: d.presence }))
+      .catch((e) => notify(e.message));
+  }, [token, notify]);
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 6000);
+    return () => clearInterval(iv);
+  }, [load]);
+
+  const loadThread = useCallback((id) => {
+    api(`/api/admin/chats/${id}`, { token })
+      .then((d) => setThread(d.chat))
+      .catch((e) => {
+        if (/not found/i.test(e.message)) {
+          // Chat was deleted (possibly by another admin): drop the selection
+          setSel((s) => (s === id ? null : s));
+          setThread((t) => (t?.id === id ? null : t));
+        } else {
+          notify(e.message);
+        }
+      });
+  }, [token, notify]);
+  useEffect(() => {
+    if (!sel) { setThread(null); return undefined; }
+    loadThread(sel);
+    const iv = setInterval(() => loadThread(sel), 4000);
+    return () => clearInterval(iv);
+  }, [sel, loadThread]);
+
+  useEffect(() => {
+    msgsRef.current?.scrollTo({ top: msgsRef.current.scrollHeight });
+  }, [thread?.messages?.length, sel]);
+
+  const sendReply = (e) => {
+    e?.preventDefault();
+    const text = reply.trim();
+    if (!text || !sel) return;
+    setReply("");
+    api(`/api/admin/chats/${sel}/reply`, { method: "POST", body: { text }, token })
+      .then(() => { loadThread(sel); load(); })
+      .catch((err) => notify(err.message));
+  };
+  const setStatus = (status) =>
+    api(`/api/admin/chats/${sel}`, { method: "PATCH", body: { status }, token })
+      .then(() => { loadThread(sel); load(); })
+      .catch((e) => notify(e.message));
+  const removeChat = (id) => {
+    if (!window.confirm("Delete this conversation permanently?")) return;
+    api(`/api/admin/chats/${id}`, { method: "DELETE", token })
+      .then(() => { if (sel === id) setSel(null); load(); })
+      .catch((e) => notify(e.message));
+  };
+
+  if (!data) return <p>Loading live chat…</p>;
+  const { chats, presence } = data;
+
+  return (
+    <div>
+      <div className="admin-card presence-card">
+        <div className="presence-head">
+          <span className={`presence-dot ${presence.count > 0 ? "live" : ""}`} aria-hidden="true" />
+          <h2>{presence.count > 0 ? `${presence.count} visitor${presence.count === 1 ? "" : "s"} on the site right now` : "No visitors on the site right now"}</h2>
+        </div>
+        {presence.visitors.length > 0 && (
+          <div className="presence-list">
+            {presence.visitors.map((v) => (
+              <span key={v.visitorId} className="presence-chip">
+                <strong>{v.location || "Locating…"}</strong>
+                <span>{v.page}</span>
+                <em>{Math.max(1, Math.round(v.sinceMs / 60000))}m on site</em>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="admin-chat-layout">
+        <div className="admin-card chat-list-card">
+          <h2>Conversations ({chats.length})</h2>
+          {chats.length === 0 && <p className="muted">When a visitor writes to the chatbot, the conversation appears here.</p>}
+          <div className="chat-list">
+            {chats.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`chat-list-item ${sel === c.id ? "active" : ""} ${c.status === "closed" ? "closed" : ""}`}
+                onClick={() => setSel(c.id)}
+              >
+                <span className="cli-top">
+                  <strong>{c.location}</strong>
+                  {c.online && <span className="cli-online">online</span>}
+                  {c.unread > 0 && <span className="cli-unread">{c.unread}</span>}
+                </span>
+                <span className="cli-preview">
+                  {c.lastMessage ? `${c.lastMessage.from === "agent" ? "You: " : c.lastMessage.from === "bot" ? "Bot: " : ""}${c.lastMessage.text}` : "-"}
+                </span>
+                <span className="cli-meta">{c.page} · {timeAgo(c.lastActiveAt)}{c.status === "closed" ? " · closed" : ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="admin-card chat-thread-card">
+          {!thread ? (
+            <p className="muted" style={{ margin: "auto", textAlign: "center" }}>
+              Select a conversation to read it and reply.<br />Your reply appears instantly in the visitor's chat window.
+            </p>
+          ) : (
+            <>
+              <div className="thread-head">
+                <div>
+                  <strong>{thread.location}</strong>
+                  <span className="muted"> · {thread.page} · started {timeAgo(thread.createdAt)}{thread.online ? " · visitor online" : ""}</span>
+                </div>
+                <div className="thread-actions">
+                  {thread.status === "closed" ? (
+                    <button type="button" className="btn btn-outline" onClick={() => setStatus("open")}>Reopen</button>
+                  ) : (
+                    <button type="button" className="btn btn-outline" onClick={() => setStatus("closed")}>Close Chat</button>
+                  )}
+                  <button type="button" className="admin-del" aria-label="Delete conversation" onClick={() => removeChat(thread.id)}>
+                    <Icon name="close" size={14} strokeWidth={2.4} />
+                  </button>
+                </div>
+              </div>
+              <div className="thread-msgs" ref={msgsRef}>
+                {thread.messages.map((m, i) => (
+                  <div key={i} className={`thread-msg ${m.from}`}>
+                    <span className="tm-who">
+                      {m.from === "visitor" ? "Visitor" : m.from === "bot" ? "Bot (auto-reply)" : m.name || "Support"}
+                      {" · "}{new Date(m.at).toLocaleTimeString()}
+                    </span>
+                    <p>{m.text}</p>
+                  </div>
+                ))}
+              </div>
+              <form className="thread-reply" onSubmit={sendReply}>
+                <input
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  placeholder="Type a reply to this visitor…"
+                  aria-label="Reply to visitor"
+                />
+                <button type="submit" className="btn btn-primary">Send</button>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({ token, notify, section }) {
   const [settings, setSettings] = useState(null);
   useEffect(() => {
-    api("https://api.kibo360.in/api/admin/settings", { token }).then((d) => setSettings(d.settings)).catch((e) => notify(e.message));
+    api("/api/admin/settings", { token }).then((d) => setSettings(d.settings)).catch((e) => notify(e.message));
   }, [token, notify]);
 
   if (!settings) return <p>Loading settings…</p>;
   const value = settings[section];
   const update = (patch) => setSettings({ ...settings, [section]: { ...value, ...patch } });
   const save = () =>
-    api("https://api.kibo360.in/api/admin/settings", { method: "PUT", body: { [section]: value }, token })
+    api("/api/admin/settings", { method: "PUT", body: { [section]: value }, token })
       .then(() => notify("Saved. The website picks this up immediately."))
       .catch((e) => notify(e.message));
 
@@ -277,7 +582,14 @@ function SettingsTab({ token, notify, section }) {
         <label>Host<input value={smtp.host} onChange={(e) => setSmtp({ host: e.target.value })} placeholder="smtp.gmail.com" /></label>
         <label>Port<input value={smtp.port} onChange={(e) => setSmtp({ port: e.target.value })} placeholder="587" /></label>
         <label>Username<input value={smtp.user} onChange={(e) => setSmtp({ user: e.target.value })} placeholder="notifications@yourdomain.com" /></label>
-        <label>Password / App password<input type="password" value={smtp.pass} onChange={(e) => setSmtp({ pass: e.target.value })} /></label>
+        <label>Password / App password
+          <input
+            type="password"
+            value={smtp.pass || ""}
+            placeholder={smtp.hasPass ? "•••••••• (saved - leave blank to keep)" : ""}
+            onChange={(e) => setSmtp({ pass: e.target.value })}
+          />
+        </label>
       </div>
       <label>From address (optional)<input value={smtp.from} onChange={(e) => setSmtp({ from: e.target.value })} placeholder="KIBO360 <no-reply@kibo360.in>" /></label>
 
@@ -285,6 +597,14 @@ function SettingsTab({ token, notify, section }) {
       <label className="admin-check">
         <input type="checkbox" checked={!!value.notifyTeam} onChange={(e) => update({ notifyTeam: e.target.checked })} />
         Email the team when a new lead arrives
+      </label>
+      <label className="admin-check">
+        <input type="checkbox" checked={value.offlineChatEmail !== false} onChange={(e) => update({ offlineChatEmail: e.target.checked })} />
+        Email the team when a visitor chats while no support user is online
+      </label>
+      <label className="admin-check">
+        <input type="checkbox" checked={value.offlineVisitorEmail !== false} onChange={(e) => update({ offlineVisitorEmail: e.target.checked })} />
+        Email the team when a visitor browses the site while no support user is online
       </label>
       <label>
         Team emails (comma separated)
@@ -312,23 +632,23 @@ function UsersTab({ token, notify }) {
   const [users, setUsers] = useState(null);
   const [draft, setDraft] = useState({ email: "", name: "", password: "", permissions: {} });
   const load = useCallback(() => {
-    api("https://api.kibo360.in/api/admin/users", { token }).then((d) => setUsers(d.users)).catch((e) => notify(e.message));
+    api("/api/admin/users", { token }).then((d) => setUsers(d.users)).catch((e) => notify(e.message));
   }, [token, notify]);
   useEffect(load, [load]);
 
   const create = () =>
-    api("https://api.kibo360.in/api/admin/users", { method: "POST", body: draft, token })
+    api("/api/admin/users", { method: "POST", body: draft, token })
       .then(() => { setDraft({ email: "", name: "", password: "", permissions: {} }); load(); notify("User created."); })
       .catch((e) => notify(e.message));
   const togglePerm = (u, key) =>
-    api(`https://api.kibo360.in/api/admin/users/${u.id}`, {
+    api(`/api/admin/users/${u.id}`, {
       method: "PATCH",
       body: { permissions: { ...u.permissions, [key]: !u.permissions[key] } },
       token,
     }).then(load).catch((e) => notify(e.message));
   const remove = (u) => {
     if (!window.confirm(`Remove access for ${u.email}?`)) return;
-    api(`https://api.kibo360.in/api/admin/users/${u.id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
+    api(`/api/admin/users/${u.id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
   };
 
   if (!users) return <p>Loading users…</p>;
@@ -394,7 +714,7 @@ function SecurityTab({ token, notify }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const change = () =>
-    api("https://api.kibo360.in/api/admin/password", { method: "POST", body: { current, next }, token })
+    api("/api/admin/password", { method: "POST", body: { current, next }, token })
       .then(() => { setCurrent(""); setNext(""); notify("Password changed."); })
       .catch((e) => notify(e.message));
   return (

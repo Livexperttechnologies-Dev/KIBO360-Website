@@ -12,6 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "submissions.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
+const CHATS_FILE = path.join(DATA_DIR, "chats.json");
 
 // Peppered hash - not a substitute for bcrypt at scale, but fine for a small
 // internal admin; the pepper keeps raw rainbow-table lookups off the table.
@@ -26,7 +27,11 @@ function readJson(file, fallback) {
 }
 function writeJson(file, value) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
+  // Atomic write (tmp + rename) so a crash mid-write can never leave a
+  // corrupt file that readJson would silently replace with the fallback.
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), "utf8");
+  fs.renameSync(tmp, file);
 }
 
 const DEFAULT_SETTINGS = {
@@ -45,6 +50,8 @@ const DEFAULT_SETTINGS = {
     smtp: { host: "", port: 587, user: "", pass: "", from: "" },
     teamEmails: ["info@livexperttechnologies.com"],
     notifyTeam: true,
+    offlineChatEmail: true,    // email the team when a visitor chats and no support user is online
+    offlineVisitorEmail: true, // email the team when a visitor browses and no support user is online
     visitorAutoReply: true,
     visitorSubject: "Thanks for contacting KIBO360",
     visitorMessage:
@@ -68,7 +75,7 @@ function loadUsers() {
       name: "Super Admin",
       passwordHash: sha256("Kibo360@Admin"), // change after first login!
       role: "superadmin",
-      permissions: { leads: true, whatsapp: true, chatbot: true, notifications: true },
+      permissions: { leads: true, chats: true, whatsapp: true, chatbot: true, notifications: true },
       createdAt: new Date().toISOString(),
     }];
     writeJson(USERS_FILE, users);
@@ -160,7 +167,10 @@ async function sendNotifications(submission) {
 // ---------------------------------------------------------------------------
 
 const app = express();
-app.use(cors({ origin: ["http://localhost:3001","https://kibo360.in", "http://127.0.0.1:3001", "http://localhost:4599"] }));
+// Exactly one proxy hop (Traefik / the local test proxy) so req.ip is the real
+// client address, not a spoofable X-Forwarded-For entry.
+app.set("trust proxy", 1);
+app.use(cors({ origin: ["http://localhost:3001","https://kibo360.in", "https://www.kibo360.in", "http://127.0.0.1:3001", "http://localhost:4599"] }));
 app.use(express.json({ limit: "200kb" }));
 
 app.get("/api/health", (_req, res) => {
@@ -264,8 +274,22 @@ app.post("/api/admin/password", requireAuth(), (req, res) => {
 
 // ---------------------------- Admin: settings ------------------------------
 
+// Only the sections the user may edit are returned, and the SMTP password is
+// never sent back to the browser (hasPass tells the UI one is saved).
+function settingsForUser(user) {
+  const s = loadSettings();
+  const out = {};
+  for (const key of ["whatsapp", "chatbot", "notifications"]) {
+    if (user.role !== "superadmin" && !user.permissions?.[key]) continue;
+    out[key] = key === "notifications"
+      ? { ...s.notifications, smtp: { ...s.notifications.smtp, pass: "", hasPass: !!s.notifications.smtp?.pass } }
+      : { ...s[key] };
+  }
+  return out;
+}
+
 app.get("/api/admin/settings", requireAuth(), (req, res) => {
-  res.json({ ok: true, settings: loadSettings() });
+  res.json({ ok: true, settings: settingsForUser(req.user) });
 });
 
 app.put("/api/admin/settings", requireAuth(), (req, res) => {
@@ -279,8 +303,16 @@ app.put("/api/admin/settings", requireAuth(), (req, res) => {
     }
     settings[key] = { ...settings[key], ...patch[key] };
   }
+  // An empty password from the form means "keep the saved one"
+  if (patch.notifications?.smtp) {
+    const stored = loadSettings().notifications?.smtp || {};
+    const smtp = { ...stored, ...patch.notifications.smtp };
+    delete smtp.hasPass;
+    if (!patch.notifications.smtp.pass) smtp.pass = stored.pass || "";
+    settings.notifications.smtp = smtp;
+  }
   writeJson(SETTINGS_FILE, settings);
-  res.json({ ok: true, settings });
+  res.json({ ok: true, settings: settingsForUser(req.user) });
 });
 
 // ---------------------------- Admin: leads ---------------------------------
@@ -340,6 +372,7 @@ app.post("/api/admin/users", requireSuperAdmin, (req, res) => {
     role: "admin",
     permissions: {
       leads: !!permissions?.leads,
+      chats: !!permissions?.chats,
       whatsapp: !!permissions?.whatsapp,
       chatbot: !!permissions?.chatbot,
       notifications: !!permissions?.notifications,
@@ -362,6 +395,7 @@ app.patch("/api/admin/users/:id", requireSuperAdmin, (req, res) => {
   if (req.body?.permissions) {
     user.permissions = {
       leads: !!req.body.permissions.leads,
+      chats: !!req.body.permissions.chats,
       whatsapp: !!req.body.permissions.whatsapp,
       chatbot: !!req.body.permissions.chatbot,
       notifications: !!req.body.permissions.notifications,
@@ -392,6 +426,380 @@ app.delete("/api/admin/users/:id", requireSuperAdmin, (req, res) => {
 
 // (The old public /api/submissions endpoint was removed - leads now require
 // an authenticated admin session via /api/admin/leads.)
+
+// ---------------------------------------------------------------------------
+// Live visitors + live chat
+// Presence is in-memory (ephemeral by nature); chat transcripts persist in
+// chats.json. Admins with the "chats" permission poll /api/admin/chats, which
+// doubles as their "support is online" heartbeat - if nobody with chat access
+// has the console open when a visitor writes, the team gets one email alert
+// per conversation.
+// ---------------------------------------------------------------------------
+
+const loadChats = () => readJson(CHATS_FILE, []);
+const saveChats = (list) => writeJson(CHATS_FILE, list);
+
+const visitors = new Map();   // visitorId -> { firstSeen, lastSeen, page, ip, location }
+const adminWatch = new Map(); // userId -> lastSeen (ms) - updated on chat polls
+const VISITOR_ONLINE_MS = 45 * 1000;   // ping every 15s -> 3 missed pings = gone
+const ADMIN_ONLINE_MS = 40 * 1000;     // console polls every 10s
+const VID_RE = /^[a-z0-9-]{10,64}$/i;
+
+const anyAdminOnline = () => {
+  const now = Date.now();
+  for (const t of adminWatch.values()) if (now - t < ADMIN_ONLINE_MS) return true;
+  return false;
+};
+const onlineVisitors = () => {
+  const now = Date.now();
+  const list = [];
+  for (const [id, v] of visitors) {
+    if (now - v.lastSeen < VISITOR_ONLINE_MS) {
+      list.push({ visitorId: id, page: v.page, location: v.location, sinceMs: now - v.firstSeen });
+    }
+  }
+  return list.sort((a, b) => b.sinceMs - a.sinceMs);
+};
+
+// Keep the presence map bounded
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [id, v] of visitors) if (v.lastSeen < cutoff) visitors.delete(id);
+  const aCut = Date.now() - 60 * 60 * 1000;
+  for (const [id, t] of adminWatch) if (t < aCut) adminWatch.delete(id);
+}, 60 * 1000).unref();
+
+// --- IP -> location (best effort, cached; never blocks a request) -----------
+const geoCache = new Map(); // ip -> string ("City, Region, Country" | "Local network")
+function isPrivateIp(ip) {
+  return !ip || /^(::1|::ffff:)?(127\.|10\.|192\.168\.|169\.254\.)/.test(ip) ||
+    /^(::ffff:)?172\.(1[6-9]|2\d|3[01])\./.test(ip) || ip === "::1" || /^f[cde]/i.test(ip);
+}
+async function lookupLocation(ip) {
+  if (isPrivateIp(ip)) return "Local network";
+  if (geoCache.has(ip)) return geoCache.get(ip);
+  if (typeof fetch !== "function") return null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: ctrl.signal });
+    clearTimeout(t);
+    const d = await r.json();
+    const loc = d && d.success !== false
+      ? [d.city, d.region, d.country].filter(Boolean).join(", ") || null
+      : null;
+    if (geoCache.size > 2000) geoCache.clear();
+    geoCache.set(ip, loc);
+    return loc;
+  } catch { return null; }
+}
+
+// --- Simple keyed rate limits for the public endpoints ----------------------
+const chatHits = new Map(); // key -> { count, reset }
+function chatLimited(key, max, windowMs = 5 * 60 * 1000) {
+  const now = Date.now();
+  let rec = chatHits.get(key);
+  if (!rec || now > rec.reset) { rec = { count: 0, reset: now + windowMs }; chatHits.set(key, rec); }
+  rec.count += 1;
+  if (chatHits.size > 10000) chatHits.clear();
+  return rec.count > max;
+}
+
+// A human agent counts as "handling" a conversation for an hour after their
+// last reply; after that the auto-bot resumes and offline alerts can re-arm.
+const AGENT_ACTIVE_MS = 60 * 60 * 1000;
+const agentRecently = (chat) =>
+  chat.messages.some((m) => m.from === "agent" && Date.now() - new Date(m.at).getTime() < AGENT_ACTIVE_MS);
+
+function pruneChats(list) {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  let out = list.filter((c) => new Date(c.lastActiveAt || c.createdAt).getTime() > cutoff);
+  // Over the cap, evict throwaway chats (1-2 messages, no human reply, >1h
+  // idle) before touching real conversations, so junk floods can't wipe
+  // genuine transcripts. Only then fall back to oldest-first.
+  const CAP = 800;
+  if (out.length > CAP) {
+    const hourAgo = Date.now() - 60 * 60 * 1000;
+    const isJunk = (c) =>
+      c.messages.length <= 2 &&
+      !c.messages.some((m) => m.from === "agent") &&
+      new Date(c.lastActiveAt || c.createdAt).getTime() < hourAgo;
+    const junk = out.filter(isJunk).sort((a, b) => new Date(a.lastActiveAt || 0) - new Date(b.lastActiveAt || 0));
+    const dropJunk = new Set(junk.slice(0, out.length - CAP).map((c) => c.id));
+    out = out.filter((c) => !dropJunk.has(c.id));
+    if (out.length > CAP) {
+      out.sort((a, b) => new Date(a.lastActiveAt || 0) - new Date(b.lastActiveAt || 0));
+      out = out.slice(out.length - CAP);
+    }
+  }
+  return out;
+}
+
+async function sendTeamEmail(subject, text) {
+  const { notifications } = loadSettings();
+  const smtp = notifications?.smtp || {};
+  if (!smtp.host || !smtp.user || !notifications.teamEmails?.length) return;
+  try {
+    const { default: nodemailer } = await import("nodemailer");
+    const transport = nodemailer.createTransport({
+      host: smtp.host,
+      port: Number(smtp.port) || 587,
+      secure: Number(smtp.port) === 465,
+      auth: { user: smtp.user, pass: smtp.pass },
+    });
+    await transport.sendMail({ from: smtp.from || smtp.user, to: notifications.teamEmails.join(","), subject, text });
+  } catch (e) {
+    console.error("[mail] team alert failed:", e.message);
+  }
+}
+
+// Global budget shared by chat alerts so a flood of fake conversations can't
+// spam the team inbox or burn the SMTP account's reputation.
+let chatAlertBudget = { count: 0, reset: 0 };
+function sendChatAlert(chat, msg) {
+  const { notifications } = loadSettings();
+  if (notifications.offlineChatEmail === false) return;
+  const now = Date.now();
+  if (now > chatAlertBudget.reset) chatAlertBudget = { count: 0, reset: now + 60 * 60 * 1000 };
+  if (chatAlertBudget.count >= 20) return;
+  chatAlertBudget.count += 1;
+  sendTeamEmail(
+    "Visitor waiting in live chat on kibo360.in",
+    `A visitor is chatting on the website and no support user is online in the admin console.\n\n` +
+      `Location: ${chat.visitor?.location || "Unknown"}\n` +
+      `Page: ${chat.visitor?.page || "-"}\n` +
+      `Message: ${msg.text}\n` +
+      `Time: ${msg.at}\n\n` +
+      `Reply from the admin console: https://kibo360.in/admin (Live Chat tab)`
+  );
+}
+
+// One "new visitor on the site" email per visitor (24h dedupe), only while no
+// support user is online, capped at 20/hour so crawlers can't flood the inbox.
+const emailedVisitors = new Map(); // visitorId -> ts
+let visitorAlertBudget = { count: 0, reset: 0 };
+function sendVisitorAlert(visitorId, v) {
+  const { notifications } = loadSettings();
+  if (notifications.offlineVisitorEmail === false) return;
+  const now = Date.now();
+  const seen = emailedVisitors.get(visitorId);
+  if (seen && now - seen < 24 * 60 * 60 * 1000) return;
+  if (now > visitorAlertBudget.reset) visitorAlertBudget = { count: 0, reset: now + 60 * 60 * 1000 };
+  if (visitorAlertBudget.count >= 20) return;
+  visitorAlertBudget.count += 1;
+  emailedVisitors.set(visitorId, now);
+  if (emailedVisitors.size > 5000) emailedVisitors.clear();
+  sendTeamEmail(
+    "New visitor on kibo360.in",
+    `Someone is browsing the website while no support user is online in the admin console.\n\n` +
+      `Location: ${v.location || "Unknown"}\n` +
+      `Page: ${v.page || "/"}\n` +
+      `Time: ${new Date().toISOString()}\n\n` +
+      `Open the admin console to chat live: https://kibo360.in/admin (Live Chat tab)`
+  );
+}
+
+// --- Public: widget heartbeat ----------------------------------------------
+app.post("/api/presence/ping", (req, res) => {
+  // Generous per-IP cap (offices share IPs; a real tab pings every 15s) that
+  // still stops high-rate floods.
+  if (chatLimited(`ping:${req.ip || "unknown"}`, 600)) return res.status(429).json({ ok: false });
+  const { visitorId, page } = req.body || {};
+  if (!VID_RE.test(String(visitorId || ""))) return res.status(400).json({ ok: false });
+  const now = Date.now();
+  let v = visitors.get(visitorId);
+  if (!v) {
+    v = { firstSeen: now, ip: req.ip, location: null };
+    visitors.set(visitorId, v);
+    if (visitors.size > 2000) {
+      // Hard cap against fake-id floods: evict oldest-inserted entries
+      // unconditionally until back under the cap.
+      for (const id of visitors.keys()) { if (visitors.size <= 1500) break; visitors.delete(id); }
+    }
+    v.page = String(page || "/").slice(0, 200);
+    lookupLocation(req.ip).then((loc) => {
+      if (loc) v.location = loc;
+      if (!anyAdminOnline()) sendVisitorAlert(visitorId, v); // fire and forget
+    });
+  }
+  v.lastSeen = now;
+  v.page = String(page || "/").slice(0, 200);
+  res.json({ ok: true, agentOnline: anyAdminOnline() });
+});
+
+// --- Public: visitor sends / syncs a message -------------------------------
+app.post("/api/chat/message", (req, res) => {
+  const ip = req.ip || "unknown";
+  if (chatLimited(`msg:${ip}`, 60)) {
+    return res.status(429).json({ ok: false, error: "Too many messages. Please slow down." });
+  }
+  const { visitorId, from, text, page } = req.body || {};
+  if (!VID_RE.test(String(visitorId || ""))) return res.status(400).json({ ok: false, error: "Bad visitor id" });
+  if (!["visitor", "bot"].includes(from)) return res.status(400).json({ ok: false, error: "Bad sender" });
+  const clean = String(text || "").trim().slice(0, 1500);
+  if (!clean) return res.status(400).json({ ok: false, error: "Empty message" });
+
+  const chats = loadChats();
+  let chat = chats.find((c) => c.visitorId === visitorId);
+  if (!chat) {
+    // Starting a NEW conversation is limited much harder than messaging, so
+    // minting random visitorIds can't flood the store or the team inbox.
+    if (chatLimited(`newchat:${ip}`, 15, 60 * 60 * 1000)) {
+      return res.status(429).json({ ok: false, error: "Too many new conversations." });
+    }
+    const pv = visitors.get(visitorId);
+    chat = {
+      id: crypto.randomUUID(),
+      visitorId,
+      createdAt: new Date().toISOString(),
+      status: "open",
+      unread: 0,
+      lastAlertAt: null,
+      visitor: {
+        ip,
+        location: pv?.location || null,
+        page: String(page || pv?.page || "/").slice(0, 200),
+      },
+      messages: [],
+    };
+    chats.push(chat);
+  }
+  if (chat.messages.length >= 400) {
+    return res.status(429).json({ ok: false, error: "This conversation is full." });
+  }
+  if (!chat.visitor.location) {
+    const pv = visitors.get(visitorId);
+    if (pv?.location) chat.visitor.location = pv.location;
+  }
+  if (page) chat.visitor.page = String(page).slice(0, 200);
+
+  const msg = { from, text: clean, at: new Date().toISOString() };
+  chat.messages.push(msg);
+  chat.lastActiveAt = msg.at;
+  let alert = false;
+  if (from === "visitor") {
+    chat.unread = (chat.unread || 0) + 1;
+    chat.status = "open";
+    // Offline alert re-arms after 6h so a visitor returning days later is
+    // never silently missed just because this chat alerted once before.
+    const lastAlert = chat.lastAlertAt ? new Date(chat.lastAlertAt).getTime() : 0;
+    if (!anyAdminOnline() && Date.now() - lastAlert > 6 * 60 * 60 * 1000) {
+      chat.lastAlertAt = msg.at; // set before the async send so it fires once
+      alert = true;
+    }
+  }
+  saveChats(pruneChats(chats));
+  if (alert) sendChatAlert(chat, msg); // fire and forget
+  res.json({ ok: true, total: chat.messages.length, agentJoined: agentRecently(chat), agentOnline: anyAdminOnline() });
+});
+
+// --- Public: visitor pulls new messages (agent replies) --------------------
+app.get("/api/chat/messages", (req, res) => {
+  const visitorId = String(req.query.visitorId || "");
+  if (!VID_RE.test(visitorId)) return res.status(400).json({ ok: false, error: "Bad visitor id" });
+  const chat = loadChats().find((c) => c.visitorId === visitorId);
+  const agentOnline = anyAdminOnline();
+  if (!chat) return res.json({ ok: true, total: 0, messages: [], agentJoined: false, agentOnline });
+  const after = Math.max(0, Number(req.query.after) || 0);
+  res.json({
+    ok: true,
+    total: chat.messages.length,
+    messages: chat.messages.slice(after).map(({ from, name, text, at }) => ({ from, name, text, at })),
+    agentJoined: agentRecently(chat),
+    agentOnline,
+    status: chat.status,
+  });
+});
+
+// --- Admin: chat overview (doubles as the support-online heartbeat) --------
+app.get("/api/admin/chats", requireAuth("chats"), (req, res) => {
+  adminWatch.set(req.user.id, Date.now());
+  const chats = loadChats()
+    .slice()
+    .sort((a, b) => new Date(b.lastActiveAt || b.createdAt) - new Date(a.lastActiveAt || a.createdAt))
+    .map((c) => {
+      const last = c.messages[c.messages.length - 1];
+      return {
+        id: c.id,
+        createdAt: c.createdAt,
+        lastActiveAt: c.lastActiveAt || c.createdAt,
+        status: c.status,
+        unread: c.unread || 0,
+        location: c.visitor?.location || "Unknown",
+        page: c.visitor?.page || "-",
+        online: (() => { const v = visitors.get(c.visitorId); return !!v && Date.now() - v.lastSeen < VISITOR_ONLINE_MS; })(),
+        messageCount: c.messages.length,
+        lastMessage: last ? { from: last.from, text: String(last.text).slice(0, 120) } : null,
+      };
+    });
+  const canLeads = req.user.role === "superadmin" || !!req.user.permissions?.leads;
+  const online = onlineVisitors();
+  res.json({
+    ok: true,
+    chats,
+    unreadTotal: chats.reduce((n, c) => n + c.unread, 0),
+    presence: { count: online.length, visitors: online },
+    leadsCount: canLeads ? loadSubmissions().length : null,
+  });
+});
+
+// --- Admin: one thread (opening it marks it read) --------------------------
+app.get("/api/admin/chats/:id", requireAuth("chats"), (req, res) => {
+  adminWatch.set(req.user.id, Date.now());
+  const chats = loadChats();
+  const chat = chats.find((c) => c.id === req.params.id);
+  if (!chat) return res.status(404).json({ ok: false, error: "Chat not found" });
+  if (chat.unread) { chat.unread = 0; saveChats(chats); }
+  const v = visitors.get(chat.visitorId);
+  res.json({
+    ok: true,
+    chat: {
+      id: chat.id,
+      createdAt: chat.createdAt,
+      lastActiveAt: chat.lastActiveAt,
+      status: chat.status,
+      location: chat.visitor?.location || "Unknown",
+      page: chat.visitor?.page || "-",
+      online: !!v && Date.now() - v.lastSeen < VISITOR_ONLINE_MS,
+      messages: chat.messages,
+    },
+  });
+});
+
+app.post("/api/admin/chats/:id/reply", requireAuth("chats"), (req, res) => {
+  adminWatch.set(req.user.id, Date.now());
+  const clean = String(req.body?.text || "").trim().slice(0, 1500);
+  if (!clean) return res.status(400).json({ ok: false, error: "Empty message" });
+  const chats = loadChats();
+  const chat = chats.find((c) => c.id === req.params.id);
+  if (!chat) return res.status(404).json({ ok: false, error: "Chat not found" });
+  const msg = { from: "agent", name: req.user.name, text: clean, at: new Date().toISOString() };
+  chat.messages.push(msg);
+  chat.lastActiveAt = msg.at;
+  chat.status = "open";
+  saveChats(chats);
+  res.json({ ok: true, message: msg, total: chat.messages.length });
+});
+
+app.patch("/api/admin/chats/:id", requireAuth("chats"), (req, res) => {
+  const status = String(req.body?.status || "");
+  if (!["open", "closed"].includes(status)) return res.status(400).json({ ok: false, error: "Invalid status" });
+  const chats = loadChats();
+  const chat = chats.find((c) => c.id === req.params.id);
+  if (!chat) return res.status(404).json({ ok: false, error: "Chat not found" });
+  chat.status = status;
+  saveChats(chats);
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/chats/:id", requireAuth("chats"), (req, res) => {
+  const chats = loadChats();
+  const idx = chats.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ ok: false, error: "Chat not found" });
+  chats.splice(idx, 1);
+  saveChats(chats);
+  res.json({ ok: true });
+});
 
 app.listen(PORT, () => {
   loadUsers(); // seed super admin on first boot
