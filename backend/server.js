@@ -315,6 +315,37 @@ app.put("/api/admin/settings", requireAuth(), (req, res) => {
   res.json({ ok: true, settings: settingsForUser(req.user) });
 });
 
+// Send a test email so admins can verify SMTP settings; unlike the
+// fire-and-forget alerts this awaits the send and reports the exact error.
+app.post("/api/admin/test-email", requireAuth("notifications"), async (req, res) => {
+  const { notifications } = loadSettings();
+  const smtp = notifications?.smtp || {};
+  if (!smtp.host || !smtp.user) {
+    return res.status(400).json({ ok: false, error: "Configure the SMTP host and username first, then save." });
+  }
+  if (!notifications.teamEmails?.length) {
+    return res.status(400).json({ ok: false, error: "Add at least one team email first, then save." });
+  }
+  try {
+    const { default: nodemailer } = await import("nodemailer");
+    const transport = nodemailer.createTransport({
+      host: smtp.host,
+      port: Number(smtp.port) || 587,
+      secure: Number(smtp.port) === 465,
+      auth: { user: smtp.user, pass: smtp.pass },
+    });
+    await transport.sendMail({
+      from: smtp.from || smtp.user,
+      to: notifications.teamEmails.join(","),
+      subject: "Test email from the KIBO360 admin console",
+      text: `This is a test email sent by ${req.user.name} (${req.user.email}) from the KIBO360 admin console.\n\nIf you received it, SMTP and team notifications are working.`,
+    });
+    res.json({ ok: true, sentTo: notifications.teamEmails });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: `SMTP error: ${e.message}` });
+  }
+});
+
 // ---------------------------- Admin: leads ---------------------------------
 
 app.get("/api/admin/leads", requireAuth("leads"), (_req, res) => {
@@ -437,7 +468,12 @@ app.delete("/api/admin/users/:id", requireSuperAdmin, (req, res) => {
 // ---------------------------------------------------------------------------
 
 const loadChats = () => readJson(CHATS_FILE, []);
-const saveChats = (list) => writeJson(CHATS_FILE, list);
+let chatVisitorSet = null; // cache: which visitorIds have a conversation
+const saveChats = (list) => { chatVisitorSet = null; writeJson(CHATS_FILE, list); };
+function visitorHasChat(visitorId) {
+  if (!chatVisitorSet) chatVisitorSet = new Set(loadChats().map((c) => c.visitorId));
+  return chatVisitorSet.has(visitorId);
+}
 
 const visitors = new Map();   // visitorId -> { firstSeen, lastSeen, page, ip, location }
 const adminWatch = new Map(); // userId -> lastSeen (ms) - updated on chat polls
@@ -624,7 +660,9 @@ app.post("/api/presence/ping", (req, res) => {
   }
   v.lastSeen = now;
   v.page = String(page || "/").slice(0, 200);
-  res.json({ ok: true, agentOnline: anyAdminOnline() });
+  // hasChat lets the widget start polling when an agent opened a conversation
+  // with a visitor who never wrote first.
+  res.json({ ok: true, agentOnline: anyAdminOnline(), hasChat: visitorHasChat(visitorId) });
 });
 
 // --- Public: visitor sends / syncs a message -------------------------------
@@ -714,7 +752,8 @@ app.get("/api/chat/messages", (req, res) => {
 // --- Admin: chat overview (doubles as the support-online heartbeat) --------
 app.get("/api/admin/chats", requireAuth("chats"), (req, res) => {
   adminWatch.set(req.user.id, Date.now());
-  const chats = loadChats()
+  const rawChats = loadChats();
+  const chats = rawChats
     .slice()
     .sort((a, b) => new Date(b.lastActiveAt || b.createdAt) - new Date(a.lastActiveAt || a.createdAt))
     .map((c) => {
@@ -733,14 +772,52 @@ app.get("/api/admin/chats", requireAuth("chats"), (req, res) => {
       };
     });
   const canLeads = req.user.role === "superadmin" || !!req.user.permissions?.leads;
+  // Scales to thousands online: full count, but only the 60 longest-engaged
+  // visitor cards are sent, each linked to its conversation when one exists.
   const online = onlineVisitors();
+  const byVisitor = new Map(rawChats.map((c) => [c.visitorId, c.id]));
+  const visitorCards = online.slice(0, 60).map((v) => ({ ...v, chatId: byVisitor.get(v.visitorId) || null }));
   res.json({
     ok: true,
     chats,
     unreadTotal: chats.reduce((n, c) => n + c.unread, 0),
-    presence: { count: online.length, visitors: online },
+    presence: { count: online.length, visitors: visitorCards },
     leadsCount: canLeads ? loadSubmissions().length : null,
   });
+});
+
+// --- Admin: proactively start (or join) a chat with a browsing visitor -----
+app.post("/api/admin/chats/start", requireAuth("chats"), (req, res) => {
+  const { visitorId, text } = req.body || {};
+  if (!VID_RE.test(String(visitorId || ""))) return res.status(400).json({ ok: false, error: "Bad visitor id" });
+  const clean = String(text || "").trim().slice(0, 1500);
+  if (!clean) return res.status(400).json({ ok: false, error: "Empty message" });
+  const chats = loadChats();
+  let chat = chats.find((c) => c.visitorId === visitorId);
+  if (!chat) {
+    const pv = visitors.get(visitorId);
+    chat = {
+      id: crypto.randomUUID(),
+      visitorId,
+      createdAt: new Date().toISOString(),
+      status: "open",
+      unread: 0,
+      lastAlertAt: null,
+      visitor: {
+        ip: pv?.ip || null,
+        location: pv?.location || null,
+        page: pv?.page || "/",
+      },
+      messages: [],
+    };
+    chats.push(chat);
+  }
+  const msg = { from: "agent", name: req.user.name, text: clean, at: new Date().toISOString() };
+  chat.messages.push(msg);
+  chat.lastActiveAt = msg.at;
+  chat.status = "open";
+  saveChats(chats);
+  res.json({ ok: true, chatId: chat.id });
 });
 
 // --- Admin: one thread (opening it marks it read) --------------------------

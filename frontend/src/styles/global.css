@@ -2885,3 +2885,83 @@ section.tight { padding: 28px 0; }
   font-family: var(--font-body);
 }
 .thread-reply input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* ---- Admin: overview stat strip + filters + roomier history -------------- */
+.admin-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px min(4vw, 40px) 0;
+}
+.stat-chip {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--body);
+  border-radius: 50px;
+  padding: 7px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat-chip strong { font-size: 0.92rem; color: var(--ink); }
+.stat-chip.live { border-color: rgba(34, 197, 94, 0.5); background: rgba(34, 197, 94, 0.07); }
+.stat-chip.live strong { color: #15803d; }
+.stat-chip.alert { border-color: rgba(225, 29, 72, 0.4); background: rgba(225, 29, 72, 0.06); }
+.stat-chip.alert strong { color: #e11d48; }
+
+.admin-card-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.admin-card-head h2 { margin: 0; }
+.admin-filter { display: inline-flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.admin-card-head .admin-filter { margin-bottom: 0; margin-left: auto; }
+.admin-filter button {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--body);
+  border-radius: 50px;
+  padding: 5px 13px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.admin-filter button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn-sm-admin { padding: 6px 12px !important; font-size: 0.72rem !important; }
+
+/* Taller history areas so long conversations stay comfortably readable */
+.chat-list { max-height: min(62vh, 640px); }
+.thread-msgs { max-height: min(62vh, 640px); }
+.chat-thread-card { min-height: 480px; }
+.chatbot-panel { max-height: min(640px, calc(100dvh - 120px)); }
+.chatbot-body { min-height: 260px; }
+
+/* ---- Admin: scalable clickable visitor grid ------------------------------ */
+.presence-head { flex-wrap: wrap; }
+.presence-search {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 50px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  min-width: 220px;
+}
+.presence-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.presence-chip {
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.presence-chip:hover { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(108, 34, 214, 0.12); }
+.presence-chip.has-chat { border-color: rgba(34, 197, 94, 0.5); background: rgba(34, 197, 94, 0.05); }

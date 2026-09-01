@@ -41,24 +41,29 @@ const PERMISSION_LABELS = {
   notifications: "Email Notifications",
 };
 
-// Short alert tone via WebAudio (no asset needed); silently no-ops if blocked.
+// Clear two-tone alert via WebAudio (no asset needed); no-ops if blocked.
 function playBeep() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     const ctx = playBeep.ctx || (playBeep.ctx = new Ctx());
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.value = 880;
-    o.connect(g);
-    g.connect(ctx.destination);
-    const t = ctx.currentTime;
-    g.gain.setValueAtTime(0.001, t);
-    g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-    o.start(t);
-    o.stop(t + 0.42);
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const tone = (freq, startIn, dur) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      o.connect(g);
+      g.connect(ctx.destination);
+      const t = ctx.currentTime + startIn;
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    };
+    tone(880, 0, 0.3);       // A5
+    tone(1318.5, 0.18, 0.4); // E6 - rising "ding-ding" that cuts through
   } catch { /* audio unavailable */ }
 }
 
@@ -134,10 +139,12 @@ export default function Admin() {
             }
           }
           prevRef.current = { first: false, unread: d.unreadTotal, presence, leads: d.leadsCount };
+          const openChats = (d.chats || []).filter((c) => c.status !== "closed").length;
           setSummary((s) =>
-            s && s.unreadTotal === d.unreadTotal && s.presenceCount === presence
+            s && s.unreadTotal === d.unreadTotal && s.presenceCount === presence &&
+            s.leadsCount === d.leadsCount && s.openChats === openChats
               ? s
-              : { unreadTotal: d.unreadTotal, presenceCount: presence }
+              : { unreadTotal: d.unreadTotal, presenceCount: presence, leadsCount: d.leadsCount, openChats }
           );
           document.title = d.unreadTotal > 0 ? `(${d.unreadTotal}) KIBO360 Admin` : "KIBO360 Admin";
         })
@@ -225,6 +232,25 @@ export default function Admin() {
         ))}
       </nav>
 
+      {summary && can("chats") && (
+        <div className="admin-stats" aria-label="Live overview">
+          <button type="button" className={`stat-chip ${summary.presenceCount > 0 ? "live" : ""}`} onClick={() => setTab("chats")}>
+            <strong>{summary.presenceCount}</strong> visitor{summary.presenceCount === 1 ? "" : "s"} online
+          </button>
+          <button type="button" className={`stat-chip ${summary.unreadTotal > 0 ? "alert" : ""}`} onClick={() => setTab("chats")}>
+            <strong>{summary.unreadTotal}</strong> unread message{summary.unreadTotal === 1 ? "" : "s"}
+          </button>
+          <button type="button" className="stat-chip" onClick={() => setTab("chats")}>
+            <strong>{summary.openChats}</strong> open conversation{summary.openChats === 1 ? "" : "s"}
+          </button>
+          {summary.leadsCount != null && can("leads") && (
+            <button type="button" className="stat-chip" onClick={() => setTab("leads")}>
+              <strong>{summary.leadsCount}</strong> lead{summary.leadsCount === 1 ? "" : "s"}
+            </button>
+          )}
+        </div>
+      )}
+
       {flash && <div className="admin-flash">{flash}</div>}
 
       <main className="admin-main">
@@ -281,10 +307,24 @@ function Login({ onSignedIn }) {
 
 function LeadsTab({ token, notify }) {
   const [leads, setLeads] = useState(null);
+  const [filter, setFilter] = useState("all");
   const load = useCallback(() => {
     api("/api/admin/leads", { token }).then((d) => setLeads(d.leads)).catch((e) => notify(e.message));
   }, [token, notify]);
   useEffect(load, [load]);
+
+  const exportCsv = (rows) => {
+    const table = [
+      ["Received", "Name", "Email", "Phone", "Organization", "Interest", "Message", "Status"],
+      ...rows.map((l) => [l.receivedAt, l.name, l.email, l.phone, l.organization, l.product, l.message, l.status || "new"]),
+    ];
+    const csv = table.map((r) => r.map((c) => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `kibo360-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const setStatus = (id, status) =>
     api(`/api/admin/leads/${id}`, { method: "PATCH", body: { status }, token })
@@ -297,16 +337,28 @@ function LeadsTab({ token, notify }) {
   if (!leads) return <p>Loading leads…</p>;
   if (leads.length === 0) return <p>No leads yet. Form submissions from the website will appear here.</p>;
 
+  const shown = filter === "all" ? leads : leads.filter((l) => (l.status || "new") === filter);
+
   return (
     <div className="admin-card">
-      <h2>Leads &amp; Form Submissions ({leads.length})</h2>
+      <div className="admin-card-head">
+        <h2>Leads &amp; Form Submissions ({shown.length}{filter !== "all" ? ` of ${leads.length}` : ""})</h2>
+        <div className="admin-filter" role="group" aria-label="Filter leads by status">
+          {["all", "new", "contacted", "closed"].map((f) => (
+            <button key={f} type="button" className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>
+              {f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn btn-outline" onClick={() => exportCsv(shown)}>Export CSV</button>
+      </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr><th>Received</th><th>Name</th><th>Contact</th><th>Interest</th><th>Message</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
-            {leads.map((l) => (
+            {shown.map((l) => (
               <tr key={l.id} className={`lead-${l.status || "new"}`}>
                 <td>{new Date(l.receivedAt).toLocaleString()}</td>
                 <td><strong>{l.name}</strong>{l.organization ? <div className="muted">{l.organization}</div> : null}</td>
@@ -339,6 +391,8 @@ function ChatsTab({ token, notify }) {
   const [sel, setSel] = useState(null);     // selected chat id
   const [thread, setThread] = useState(null);
   const [reply, setReply] = useState("");
+  const [filter, setFilter] = useState("all"); // all | open | closed
+  const [visitorQuery, setVisitorQuery] = useState("");
   const msgsRef = useRef(null);
 
   // Ask once for browser notification permission (used for chat alerts)
@@ -405,8 +459,24 @@ function ChatsTab({ token, notify }) {
       .catch((e) => notify(e.message));
   };
 
+  const startChat = (v) => {
+    if (v.chatId) { setSel(v.chatId); return; }
+    const text = window.prompt(
+      `Send an opening message to this visitor (${v.location || "location unknown"}, on ${v.page}):`,
+      "Hi! I'm from the Kibo360 team - happy to help if you have any questions."
+    );
+    if (!text || !text.trim()) return;
+    api("/api/admin/chats/start", { method: "POST", body: { visitorId: v.visitorId, text: text.trim() }, token })
+      .then((d) => { setSel(d.chatId); load(); notify("Message sent - it pops up in the visitor's chat within a few seconds."); })
+      .catch((e) => notify(e.message));
+  };
+
   if (!data) return <p>Loading live chat…</p>;
   const { chats, presence } = data;
+  const q = visitorQuery.trim().toLowerCase();
+  const shownVisitors = q
+    ? presence.visitors.filter((v) => `${v.location || ""} ${v.page || ""}`.toLowerCase().includes(q))
+    : presence.visitors;
 
   return (
     <div>
@@ -414,26 +484,49 @@ function ChatsTab({ token, notify }) {
         <div className="presence-head">
           <span className={`presence-dot ${presence.count > 0 ? "live" : ""}`} aria-hidden="true" />
           <h2>{presence.count > 0 ? `${presence.count} visitor${presence.count === 1 ? "" : "s"} on the site right now` : "No visitors on the site right now"}</h2>
+          {presence.visitors.length > 3 && (
+            <input
+              className="presence-search"
+              value={visitorQuery}
+              onChange={(e) => setVisitorQuery(e.target.value)}
+              placeholder="Search by location or page…"
+              aria-label="Search live visitors"
+            />
+          )}
         </div>
         {presence.visitors.length > 0 && (
-          <div className="presence-list">
-            {presence.visitors.map((v) => (
-              <span key={v.visitorId} className="presence-chip">
-                <strong>{v.location || "Locating…"}</strong>
-                <span>{v.page}</span>
-                <em>{Math.max(1, Math.round(v.sinceMs / 60000))}m on site</em>
-              </span>
-            ))}
-          </div>
+          <>
+            <p className="muted" style={{ margin: "10px 0 0" }}>
+              Click a visitor to start chatting with them
+              {presence.count > presence.visitors.length ? ` · showing the ${presence.visitors.length} longest-active of ${presence.count}` : ""}.
+            </p>
+            <div className="presence-list">
+              {shownVisitors.map((v) => (
+                <button key={v.visitorId} type="button" className={`presence-chip ${v.chatId ? "has-chat" : ""}`} onClick={() => startChat(v)}>
+                  <strong>{v.location || "Locating…"}</strong>
+                  <span>{v.page}</span>
+                  <em>{Math.max(1, Math.round(v.sinceMs / 60000))}m on site{v.chatId ? " · in chat" : ""}</em>
+                </button>
+              ))}
+              {shownVisitors.length === 0 && <p className="muted">No visitors match "{visitorQuery}".</p>}
+            </div>
+          </>
         )}
       </div>
 
       <div className="admin-chat-layout">
         <div className="admin-card chat-list-card">
           <h2>Conversations ({chats.length})</h2>
+          <div className="admin-filter" role="group" aria-label="Filter conversations">
+            {["all", "open", "closed"].map((f) => (
+              <button key={f} type="button" className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>
+                {f[0].toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
           {chats.length === 0 && <p className="muted">When a visitor writes to the chatbot, the conversation appears here.</p>}
           <div className="chat-list">
-            {chats.map((c) => (
+            {(filter === "all" ? chats : chats.filter((c) => (filter === "closed" ? c.status === "closed" : c.status !== "closed"))).map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -507,17 +600,43 @@ function ChatsTab({ token, notify }) {
 
 function SettingsTab({ token, notify, section }) {
   const [settings, setSettings] = useState(null);
+  // Free-typing text for the comma-separated list; parsed only on save so
+  // typing a comma is never "eaten" by re-normalization.
+  const [teamText, setTeamText] = useState("");
+  const [testing, setTesting] = useState(false);
   useEffect(() => {
-    api("/api/admin/settings", { token }).then((d) => setSettings(d.settings)).catch((e) => notify(e.message));
+    api("/api/admin/settings", { token })
+      .then((d) => {
+        setSettings(d.settings);
+        setTeamText((d.settings?.notifications?.teamEmails || []).join(", "));
+      })
+      .catch((e) => notify(e.message));
   }, [token, notify]);
 
   if (!settings) return <p>Loading settings…</p>;
   const value = settings[section];
   const update = (patch) => setSettings({ ...settings, [section]: { ...value, ...patch } });
-  const save = () =>
-    api("/api/admin/settings", { method: "PUT", body: { [section]: value }, token })
-      .then(() => notify("Saved. The website picks this up immediately."))
+  const save = () => {
+    const payload = { ...value };
+    if (section === "notifications") {
+      payload.teamEmails = teamText.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    return api("/api/admin/settings", { method: "PUT", body: { [section]: payload }, token })
+      .then((d) => {
+        setSettings(d.settings);
+        setTeamText((d.settings?.notifications?.teamEmails || value.teamEmails || []).join(", "));
+        notify("Saved. The website picks this up immediately.");
+      })
       .catch((e) => notify(e.message));
+  };
+  const sendTest = () => {
+    setTesting(true);
+    save()
+      .then(() => api("/api/admin/test-email", { method: "POST", token }))
+      .then((d) => { if (d?.ok) notify(`Test email sent to ${d.sentTo.join(", ")} - check the inbox.`); })
+      .catch((e) => notify(e.message))
+      .finally(() => setTesting(false));
+  };
 
   if (section === "whatsapp") {
     return (
@@ -609,8 +728,9 @@ function SettingsTab({ token, notify, section }) {
       <label>
         Team emails (comma separated)
         <input
-          value={(value.teamEmails || []).join(", ")}
-          onChange={(e) => update({ teamEmails: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+          value={teamText}
+          onChange={(e) => setTeamText(e.target.value)}
+          placeholder="sales@kibo360.in, support@kibo360.in"
         />
       </label>
 
@@ -623,7 +743,12 @@ function SettingsTab({ token, notify, section }) {
       <label>Message (use {"{name}"} for the visitor's name)
         <textarea rows="4" value={value.visitorMessage} onChange={(e) => update({ visitorMessage: e.target.value })} />
       </label>
-      <button type="button" className="btn btn-primary" onClick={save}>Save Email Settings</button>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button type="button" className="btn btn-primary" onClick={save}>Save Email Settings</button>
+        <button type="button" className="btn btn-outline" onClick={sendTest} disabled={testing}>
+          {testing ? "Sending…" : "Save & Send Test Email"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -649,6 +774,14 @@ function UsersTab({ token, notify }) {
   const remove = (u) => {
     if (!window.confirm(`Remove access for ${u.email}?`)) return;
     api(`/api/admin/users/${u.id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
+  };
+  const resetPassword = (u) => {
+    const pw = window.prompt(`New password for ${u.email} (min 8 characters):`);
+    if (pw === null) return;
+    if (pw.length < 8) { notify("Password must be at least 8 characters."); return; }
+    api(`/api/admin/users/${u.id}`, { method: "PATCH", body: { password: pw }, token })
+      .then(() => notify(`Password updated for ${u.email}.`))
+      .catch((e) => notify(e.message));
   };
 
   if (!users) return <p>Loading users…</p>;
@@ -676,9 +809,14 @@ function UsersTab({ token, notify }) {
                 ))}
                 <td>
                   {u.role !== "superadmin" && (
-                    <button type="button" className="admin-del" aria-label="Remove user" onClick={() => remove(u)}>
-                      <Icon name="close" size={14} strokeWidth={2.4} />
-                    </button>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                      <button type="button" className="btn btn-outline btn-sm-admin" onClick={() => resetPassword(u)}>
+                        Reset Password
+                      </button>
+                      <button type="button" className="admin-del" aria-label="Remove user" onClick={() => remove(u)}>
+                        <Icon name="close" size={14} strokeWidth={2.4} />
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

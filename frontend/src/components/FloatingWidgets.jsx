@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import Icon from "./Icon.jsx";
 import { useDemoModal } from "./DemoModalContext.jsx";
 import { company } from "../data/siteData.js";
@@ -116,6 +117,16 @@ function matchIntent(text, customFaqs) {
   };
 }
 
+// Proactive nudge shown when a visitor lingers on a page for 30 seconds
+const NUDGES = [
+  { path: "/products/hms", text: "I see you're exploring KIBO360 HMS! Can I answer anything - modules, pricing, or how it fits your hospital?" },
+  { path: "/products/cms", text: "Looking at our Clinical Management System? Happy to answer anything - features, pricing, or how fast your clinic can go live." },
+  { path: "/products", text: "Looking for the right solution? Tell me a little about your organisation and I'll point you to the right product." },
+  { path: "/contact", text: "Need a hand reaching us? I can connect you with our team right here, or you can book a demo below." },
+  { path: "/about", text: "Getting to know Kibo360? Ask me anything about our platform, certifications or the team behind it." },
+];
+const NUDGE_DEFAULT = "Welcome to Kibo360! Can I help you find the right solution for your business?";
+
 function getVisitorId() {
   try {
     let id = localStorage.getItem("kibo360-visitor-id");
@@ -145,7 +156,11 @@ export default function FloatingWidgets() {
   const [unread, setUnread] = useState(0);
   const [agentOnline, setAgentOnline] = useState(false);
   const [agentJoined, setAgentJoined] = useState(false);
+  const [started, setStarted] = useState(() => {
+    try { return localStorage.getItem("kibo360-chat-started") === "1"; } catch { return false; }
+  });
   const { openDemo } = useDemoModal();
+  const { pathname } = useLocation();
   const bodyRef = useRef(null);
   const visitorIdRef = useRef(getVisitorId());
   // Cursor = how many server messages we've already seen. Persisted so a page
@@ -154,6 +169,13 @@ export default function FloatingWidgets() {
     try { const v = Number(localStorage.getItem("kibo360-chat-cursor")); return Number.isFinite(v) && v > 0 ? v : 0; } catch { return 0; }
   })());
   const cursorKnownRef = useRef(cursorRef.current > 0);
+  // Visitors who chatted before cursor persistence existed: baseline once
+  // instead of replaying their whole history as "new". A visitor with no
+  // local chat at all (agent reached out proactively) must NOT baseline -
+  // the agent's message is genuinely new to them.
+  const legacyRef = useRef(cursorRef.current === 0 && (() => {
+    try { return localStorage.getItem("kibo360-chat-started") === "1"; } catch { return false; }
+  })());
   const startedRef = useRef(false);     // does a server-side chat session exist?
   const openRef = useRef(false);
   const historyLoadedRef = useRef(false);
@@ -165,8 +187,15 @@ export default function FloatingWidgets() {
     cursorKnownRef.current = true;
     try { localStorage.setItem("kibo360-chat-cursor", String(n)); } catch { /* ignore */ }
   };
+  const markStarted = () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setStarted(true);
+    try { localStorage.setItem("kibo360-chat-started", "1"); } catch { /* ignore */ }
+  };
 
   useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => { startedRef.current = started; }, [started]);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/settings`)
@@ -179,7 +208,6 @@ export default function FloatingWidgets() {
 
   // Presence heartbeat: lets the team see live visitors (count, page, location)
   useEffect(() => {
-    try { startedRef.current = localStorage.getItem("kibo360-chat-started") === "1"; } catch { /* ignore */ }
     const ping = () => {
       fetch(`${API_BASE}/api/presence/ping`, {
         method: "POST",
@@ -187,17 +215,23 @@ export default function FloatingWidgets() {
         body: JSON.stringify({ visitorId: visitorIdRef.current, page: window.location.pathname }),
       })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (d?.ok) setAgentOnline(!!d.agentOnline); })
+        .then((d) => {
+          if (!d?.ok) return;
+          setAgentOnline(!!d.agentOnline);
+          // An agent proactively opened a chat with this visitor: start
+          // polling so their message pops up in the widget.
+          if (d.hasChat) markStarted();
+        })
         .catch(() => { /* offline */ });
     };
     ping();
     const iv = setInterval(ping, 15000);
     return () => clearInterval(iv);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pull new messages from the server (agent replies appear here)
   useEffect(() => {
-    if (!startedRef.current && !open) return undefined;
+    if (!started && !open) return undefined;
     const poll = () => {
       if (!startedRef.current || pollBusyRef.current || (open && !historyLoadedRef.current)) return;
       pollBusyRef.current = true;
@@ -211,9 +245,10 @@ export default function FloatingWidgets() {
           if (cursorRef.current !== requestAfter) return;
           setAgentOnline(!!d.agentOnline);
           setAgentJoined(!!d.agentJoined);
-          const baseline = !cursorKnownRef.current && requestAfter === 0;
+          const baseline = !cursorKnownRef.current && requestAfter === 0 && legacyRef.current;
+          legacyRef.current = false;
           setCursor(d.total);
-          if (baseline) return; // first contact after an update/clear: don't replay history
+          if (baseline) return; // pre-update visitor: don't replay their history as "new"
           const fresh = (d.messages || []).filter((m) => m.from === "agent");
           if (fresh.length > 0) {
             setMessages((m) => [...m, ...fresh.map((f) => ({ from: "agent", name: f.name, text: f.text }))]);
@@ -226,7 +261,7 @@ export default function FloatingWidgets() {
     poll();
     const iv = setInterval(poll, open ? 3500 : 12000);
     return () => clearInterval(iv);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restore the conversation after a reload so the thread continues
   useEffect(() => {
@@ -262,6 +297,25 @@ export default function FloatingWidgets() {
     if (open) setUnread(0);
   }, [open]);
 
+  // Proactive engagement: after 30s on one page (once per browser session),
+  // the bot opens with a page-aware message. Skipped when the visitor already
+  // chats with us, has the panel open, or the demo popup is showing.
+  useEffect(() => {
+    if (!config.chatbot.enabled) return undefined;
+    const t = setTimeout(() => {
+      try { if (sessionStorage.getItem("kibo360-bot-nudged") === "1") return; } catch { /* ignore */ }
+      if (openRef.current || startedRef.current || document.querySelector(".modal-overlay")) return;
+      try { sessionStorage.setItem("kibo360-bot-nudged", "1"); } catch { /* ignore */ }
+      const nudge = NUDGES.find((n) => pathname.startsWith(n.path))?.text || NUDGE_DEFAULT;
+      setMessages((m) => [
+        ...m,
+        { from: "bot", text: nudge, actions: [{ label: "Book a Free Demo", type: "demo" }] },
+      ]);
+      setOpen(true);
+    }, 30000);
+    return () => clearTimeout(t);
+  }, [pathname, config.chatbot.enabled]);
+
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, open]);
@@ -278,8 +332,7 @@ export default function FloatingWidgets() {
       .catch(() => null);
 
   const syncMessage = async (from, text) => {
-    startedRef.current = true;
-    try { localStorage.setItem("kibo360-chat-started", "1"); } catch { /* ignore */ }
+    markStarted();
     const d = await postMessage(from, text);
     if (!d) {
       // Backend unreachable or throttled: queue so support still gets it later
