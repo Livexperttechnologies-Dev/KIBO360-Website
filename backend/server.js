@@ -160,7 +160,7 @@ async function sendNotifications(submission) {
 // ---------------------------------------------------------------------------
 
 const app = express();
-app.use(cors({ origin: ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:4599"] }));
+app.use(cors({ origin: ["http://localhost:3001","https://kibo360.in", "http://127.0.0.1:3001", "http://localhost:4599"] }));
 app.use(express.json({ limit: "200kb" }));
 
 app.get("/api/health", (_req, res) => {
