@@ -5,7 +5,7 @@ import { company } from "../data/siteData.js";
 
 // ---------------------------------------------------------------------------
 // Floating WhatsApp button (bottom-left) + auto-answer chatbot (bottom-right).
-// Config comes from /https://api.kibo360.in/api/settings (managed in the admin panel); sensible
+// Config comes from https://api.kibo360.in/api/settings (managed in the admin panel); sensible
 // defaults apply when the backend is unreachable.
 // ---------------------------------------------------------------------------
 
@@ -129,7 +129,7 @@ export default function FloatingWidgets() {
   const bodyRef = useRef(null);
 
   useEffect(() => {
-    fetch("/https://api.kibo360.in/api/settings")
+    fetch("https://api.kibo360.in/api/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.ok) setConfig({ whatsapp: { ...DEFAULT_CONFIG.whatsapp, ...d.whatsapp }, chatbot: { ...DEFAULT_CONFIG.chatbot, ...d.chatbot } });
