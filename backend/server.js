@@ -341,7 +341,7 @@ app.post("/api/contact", (req, res) => {
     product: String(product || "General").trim().slice(0, 80),
     message: String(message).trim().slice(0, 5000),
     preferredDate: String(req.body?.preferredDate || "").trim().slice(0, 60),
-    preferredTime: String(req.body?.preferredTime || "").trim().slice(0, 40),
+    preferredTime: String(req.body?.preferredTime || "").trim().slice(0, 120), // up to 3 comma-joined slots
   };
   const list = loadSubmissions();
   list.push(submission);

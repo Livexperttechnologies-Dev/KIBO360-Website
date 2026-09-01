@@ -171,7 +171,10 @@ const dateChips = () =>
       value: d.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
     };
   });
-const timeChips = () => TIME_SLOTS.map((t) => ({ label: t, type: "wizard", value: t }));
+const timeChips = (picked = []) => [
+  ...TIME_SLOTS.filter((t) => !picked.includes(t)).map((t) => ({ label: t, type: "wizard", value: t })),
+  ...(picked.length >= 2 ? [{ label: "That's Enough - Continue", type: "wizard", value: "continue" }] : []),
+];
 
 function getVisitorId() {
   try {
@@ -409,6 +412,7 @@ export default function FloatingWidgets() {
   };
 
   const submitBooking = (data) => {
+    const slots = (data.times || []).join(", ");
     botSay("One moment - booking your demo…");
     fetch(`${API_BASE}/api/contact`, {
       method: "POST",
@@ -419,9 +423,9 @@ export default function FloatingWidgets() {
         phone: data.phone || "",
         organization: data.organization || "",
         product: "Demo Booking (Chat)",
-        message: `Demo booked via the chatbot for ${data.date} at ${data.time}.`,
+        message: `Demo booked via the chatbot for ${data.date}. Preferred slots in order: ${slots}.`,
         preferredDate: data.date,
-        preferredTime: data.time,
+        preferredTime: slots,
       }),
     })
       .then((r) => r.json().then((d) => ({ ok: r.ok && d.ok })))
@@ -429,7 +433,7 @@ export default function FloatingWidgets() {
         if (ok) {
           setBooking(null);
           botSay(
-            `You're booked, ${data.name}! We've noted ${data.date} at ${data.time}. Our team will confirm on ${data.email}${data.phone ? ` or ${data.phone}` : ""} shortly. Anything else I can help with?`
+            `You're booked, ${data.name}! We've noted ${data.date}, with ${slots} as your preferred slots - if the first is busy, our team simply takes the next. We'll confirm on ${data.email}${data.phone ? ` or ${data.phone}` : ""} shortly. Anything else I can help with?`
           );
         } else {
           botSay("Hmm, that didn't go through. Want to try again?", [
@@ -444,6 +448,18 @@ export default function FloatingWidgets() {
           { label: "Cancel", type: "wizard", value: "cancel" },
         ])
       );
+  };
+
+  const goToConfirm = (data) => {
+    setBooking({ step: "confirm", data });
+    botSay(
+      `Here's your demo booking:\n• Name: ${data.name}\n• Email: ${data.email}\n• Phone: ${data.phone || "-"}\n• Organisation: ${data.organization || "-"}\n• Date: ${data.date}\n• Time slots (in order of preference): ${(data.times || []).join(", ")}\n\nShall I confirm it?`,
+      [
+        { label: "Confirm Booking", type: "wizard", value: "confirm" },
+        { label: "Start Over", type: "wizard", value: "restart" },
+        { label: "Cancel", type: "wizard", value: "cancel" },
+      ]
+    );
   };
 
   const handleBookingInput = (raw) => {
@@ -488,22 +504,36 @@ export default function FloatingWidgets() {
       case "date":
         if (text.length < 3) { botSay("Please pick a date below or type one:", dateChips()); return; }
         data.date = text.slice(0, 60);
+        data.times = [];
         setBooking({ step: "time", data });
-        botSay("And what time suits you?", timeChips());
-        return;
-      case "time":
-        if (text.length < 2) { botSay("Please pick a time below or type one:", timeChips()); return; }
-        data.time = text.slice(0, 40);
-        setBooking({ step: "confirm", data });
         botSay(
-          `Here's your demo booking:\n• Name: ${data.name}\n• Email: ${data.email}\n• Phone: ${data.phone || "-"}\n• Organisation: ${data.organization || "-"}\n• Date: ${data.date}\n• Time: ${data.time}\n\nShall I confirm it?`,
-          [
-            { label: "Confirm Booking", type: "wizard", value: "confirm" },
-            { label: "Start Over", type: "wizard", value: "restart" },
-            { label: "Cancel", type: "wizard", value: "cancel" },
-          ]
+          "And which times suit you? Pick 2-3 slots in order of preference - if one is busy, our team simply moves to your next choice.",
+          timeChips()
         );
         return;
+      case "time": {
+        const times = data.times || [];
+        if (lower === "continue") {
+          if (times.length < 2) {
+            botSay("Please pick at least 2 slots first, so we have a backup if one is busy:", timeChips(times));
+            return;
+          }
+          goToConfirm(data);
+          return;
+        }
+        if (text.length < 2) { botSay("Please pick a time below or type one:", timeChips(times)); return; }
+        const slot = text.slice(0, 40);
+        if (!times.some((x) => x.toLowerCase() === slot.toLowerCase())) times.push(slot);
+        data.times = times;
+        if (times.length >= 3) { goToConfirm(data); return; }
+        setBooking({ step: "time", data });
+        if (times.length === 1) {
+          botSay(`Got it - ${slot} as your first choice. Now pick 1-2 backup slots, in case that one is busy:`, timeChips(times));
+        } else {
+          botSay(`Added ${slot}. You can pick one more backup slot, or continue:`, timeChips(times));
+        }
+        return;
+      }
       case "confirm":
         if (lower === "confirm" || lower === "yes" || lower === "ok" || lower === "okay") { submitBooking(data); return; }
         botSay("Tap Confirm Booking to finish, Start Over to re-enter details, or Cancel to stop.", [
