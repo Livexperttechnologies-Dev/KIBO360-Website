@@ -58,8 +58,9 @@ export default function Footer() {
 
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} {company.poweredBy}. All rights reserved.</span>
-        <span>
-          <Link to="/privacy-policy">Privacy</Link> · <Link to="/terms">Terms</Link>
+        <span className="footer-certs">
+          <span><Icon name="award" size={14} /> ISO 9001:2015 Certified</span>
+          <span><Icon name="target" size={14} /> CMMI Level 3</span>
         </span>
       </div>
     </footer>

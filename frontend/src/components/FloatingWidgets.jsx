@@ -19,7 +19,7 @@ const DEFAULT_CONFIG = {
   chatbot: {
     enabled: true,
     botName: "Kibo Assistant",
-    welcome: "Hi! I'm the Kibo360 assistant. Ask me about our products, demos or support - or pick an option below.",
+    welcome: "Hi! I'm your KIBO360 assistant. Ask me about our products or pricing - or I can book your free demo right here in the chat.",
     quickReplies: null, // null -> built-in QUICK_REPLIES
     fallback: null,     // null -> built-in fallback text
     intents: null,      // null -> built-in INTENTS
@@ -30,76 +30,89 @@ const DEFAULT_CONFIG = {
   },
 };
 
-const QUICK_REPLIES = ["Our Products", "Book a Demo", "HMS", "CMS", "Contact & Support"];
+const QUICK_REPLIES = ["Our Products", "Book a Demo", "Pricing", "HMS", "CMS", "Talk to Support"];
 
-// Built-in knowledge: [keywords[], answer, actions?]
+// Offline fallback knowledge - the served copy lives in the backend settings
+// (admin console -> Chatbot) and takes priority when reachable.
 const INTENTS = [
   {
     keywords: ["hello", "hi", "hey", "namaste", "good morning", "good afternoon", "good evening"],
-    answer: "Hello! How can I help you today? You can ask about our products, book a demo, or talk to our support team.",
+    answer:
+      "Hello! Great to have you here. I can walk you through our products, share how pricing works, or book your free demo right in this chat. What would you like to do?",
+    actions: [
+      { label: "View Products", type: "link", href: "/products" },
+      { label: "Book a Free Demo", type: "demo" },
+    ],
   },
   {
     keywords: ["product", "solution", "software", "what do you", "offer", "our products"],
     answer:
-      "Kibo360 brings business software together on one platform:\n• HMS - Hospital Management Software (live)\n• CMS - Clinic Management Software (live)\n• ERP, CRM, LIS and Inventory - coming soon\n\nEverything shares one intelligent database, so you can add products as you grow.",
-    actions: [{ label: "View All Products", type: "link", href: "/products" }],
+      "Kibo360 puts your whole business on one platform:\n• HMS - complete Hospital Management Software (live)\n• CMS - Clinical Management System for clinics (live)\n• ERP, CRM, LIS and Inventory - launching soon\n\nEvery product shares one intelligent database, so your teams stop juggling disconnected tools - and you simply add products as you grow.",
+    actions: [
+      { label: "View All Products", type: "link", href: "/products" },
+      { label: "Book a Free Demo", type: "demo" },
+    ],
   },
   {
     keywords: ["hms", "hospital"],
     answer:
-      "KIBO360 HMS runs your whole hospital - OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance, HR & payroll and AI analytics on one intelligent database, with ABHA health ID support built in.",
+      "KIBO360 HMS runs your entire hospital on one intelligent database - OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance, HR & payroll and AI-powered analytics, with ABHA health IDs built in. Want to see it working on your own workflows?",
     actions: [
       { label: "Explore HMS", type: "link", href: "/products/hms" },
-      { label: "Book a Demo", type: "demo" },
+      { label: "Book a Free Demo", type: "demo" },
     ],
   },
   {
     keywords: ["cms", "clinic"],
     answer:
-      "KIBO360 CMS is built for clinics - appointments, queue & token, doctor EMR, e-prescriptions, GST billing, pharmacy and WhatsApp reminders. Live in days, and it upgrades to full HMS without any data migration.",
+      "KIBO360 CMS keeps your clinic running smoothly - appointments, queue & token, doctor EMR, e-prescriptions, GST billing, pharmacy and WhatsApp reminders. Most clinics go live within days, and you can upgrade to the full HMS anytime without migrating data.",
     actions: [
       { label: "Explore CMS", type: "link", href: "/products/cms" },
-      { label: "Book a Demo", type: "demo" },
+      { label: "Book a Free Demo", type: "demo" },
     ],
   },
   {
-    keywords: ["price", "pricing", "cost", "charges", "fees", "quote", "subscription"],
+    keywords: ["price", "pricing", "cost", "charges", "fees", "quote", "subscription", "plan"],
     answer:
-      "Pricing depends on your facility size and the modules you need. Book a free demo and our team will prepare a quote tailored to you - usually within one business day.",
+      "Fair question! Pricing depends on your facility's size and the modules you pick, so we prepare a personalised quote for every customer. Book a free demo right here in the chat and you'll have your tailored quote within one business day.",
     actions: [{ label: "Book a Free Demo", type: "demo" }],
   },
   {
-    keywords: ["demo", "book", "trial", "see it"],
-    answer: "Happy to set that up! Click below and tell us a little about your facility - we respond within one business day.",
-    actions: [{ label: "Book a Free Demo", type: "demo" }],
+    keywords: ["demo", "book", "trial", "see it", "appointment"],
+    answer:
+      "Excellent choice! I can book your free demo right here in the chat - I'll just ask for a few details and your preferred date and time. Ready when you are!",
+    actions: [{ label: "Book My Demo", type: "demo" }],
   },
   {
     keywords: ["contact", "support", "help", "talk", "human", "agent", "team", "call", "phone", "email"],
-    answer: `You can reach our team directly:\n• Call ${company.phone}\n• Email ${company.email}\n• Or chat with us on WhatsApp\n\nYou can also just keep typing here - our support team sees this chat and can jump in.`,
+    answer: `Our team is happy to help:\n• Call ${company.phone}\n• Email ${company.email}\n• Or message us on WhatsApp\n\nYou can also simply keep typing here - our support team sees this chat and can jump in anytime.`,
     actions: [
       { label: "WhatsApp Us", type: "wa" },
       { label: `Call ${company.phone}`, type: "tel" },
-      { label: "Send a Message", type: "demo" },
+      { label: "Book a Free Demo", type: "demo" },
     ],
   },
   {
     keywords: ["certif", "iso", "cmmi", "quality"],
     answer:
-      "Livexpert Technologies is ISO 9001:2015 certified (Quality Management Systems) and appraised at CMMI Level 3. Kibo360 also holds ABHA certification.",
+      "We take quality seriously. Livexpert Technologies is ISO 9001:2015 certified for Quality Management Systems and appraised at CMMI Level 3, and Kibo360 holds ABHA certification. You'll find the details on our About page.",
     actions: [{ label: "About Us", type: "link", href: "/about" }],
   },
   {
-    keywords: ["abha", "compliance", "secure", "security", "data"],
+    keywords: ["abha", "compliance", "secure", "security", "data", "privacy"],
     answer:
-      "Kibo360 is ABHA certified, and your data is protected with AES-256 encryption, role-based access, two-factor authentication, audit logs and disaster recovery.",
+      "Your data is in safe hands. Kibo360 is ABHA certified and protects every record with AES-256 encryption, role-based access, two-factor authentication, full audit logs and disaster recovery.",
+    actions: [{ label: "Book a Free Demo", type: "demo" }],
   },
   {
     keywords: ["address", "location", "office", "where"],
-    answer: `We're at ${company.address}.`,
+    answer: `You'll find us at ${company.address}. Drop by any time - or book a demo and we'll bring Kibo360 to you, virtually!`,
+    actions: [{ label: "Contact Us", type: "link", href: "/contact" }],
   },
   {
     keywords: ["thank", "thanks", "great", "ok", "okay"],
-    answer: "You're welcome! Anything else I can help with?",
+    answer: "You're most welcome! Anything else I can help with - products, pricing, or a quick demo?",
+    actions: [{ label: "Book a Free Demo", type: "demo" }],
   },
 ];
 
@@ -126,10 +139,10 @@ function matchIntent(text, chatbot) {
   return {
     answer:
       chatbot.fallback ||
-      "I'm not sure about that one - but our team will know! Your message has been shared with our support team, and you can also book a demo, message us on WhatsApp, or call us.",
+      "That's a good question - and our team will have the answer! I've shared your message with them. Meanwhile I can book you a demo right here in chat, or you can reach us on WhatsApp or by phone.",
     actions: [
-      { label: "Talk to Support (WhatsApp)", type: "wa" },
-      { label: "Book a Demo", type: "demo" },
+      { label: "Book a Free Demo", type: "demo" },
+      { label: "WhatsApp Us", type: "wa" },
       { label: `Call ${company.phone}`, type: "tel" },
     ],
   };
@@ -137,13 +150,13 @@ function matchIntent(text, chatbot) {
 
 // Proactive nudge shown when a visitor lingers on a page for 30 seconds
 const NUDGES = [
-  { path: "/products/hms", text: "I see you're exploring KIBO360 HMS! Can I answer anything - modules, pricing, or how it fits your hospital?" },
-  { path: "/products/cms", text: "Looking at our Clinical Management System? Happy to answer anything - features, pricing, or how fast your clinic can go live." },
-  { path: "/products", text: "Looking for the right solution? Tell me a little about your organisation and I'll point you to the right product." },
-  { path: "/contact", text: "Need a hand reaching us? I can connect you with our team right here, or you can book a demo below." },
-  { path: "/about", text: "Getting to know Kibo360? Ask me anything about our platform, certifications or the team behind it." },
+  { path: "/products/hms", text: "I see you're exploring KIBO360 HMS! Ask me anything - modules, pricing, implementation - or I can book you a quick demo right here." },
+  { path: "/products/cms", text: "Checking out our Clinical Management System? Happy to answer anything - features, pricing, go-live time - or book you a quick demo right here." },
+  { path: "/products", text: "Finding the right fit? Tell me a little about your organisation and I'll point you to the right product - or show you everything in a quick demo." },
+  { path: "/contact", text: "Need a hand reaching us? I can connect you with the team right here in chat, or book you a demo at a time that suits you." },
+  { path: "/about", text: "Getting to know Kibo360? Ask me anything about the platform, our certifications, or the team behind it." },
 ];
-const NUDGE_DEFAULT = "Welcome to Kibo360! Can I help you find the right solution for your business?";
+const NUDGE_DEFAULT = "Welcome to Kibo360! Can I help you find the right solution for your business - or book you a free demo right here in the chat?";
 
 // In-chat demo booking wizard
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;

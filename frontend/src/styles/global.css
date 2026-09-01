@@ -659,7 +659,10 @@ section.tight { padding: 28px 0; }
   padding: 6px 6px 14px;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
+  /* No visible scrollbar - the arrow buttons (and touch swipe) do the moving */
+  scrollbar-width: none;
 }
+.product-scroller::-webkit-scrollbar { display: none; }
 .product-scroller.compact .product-card { padding: 22px 20px; gap: 10px; border-radius: 18px; }
 .product-scroller.compact .product-avatar { width: 46px; height: 46px; font-size: 1rem; border-radius: 13px; }
 .product-scroller.compact h3 { font-size: 1.05rem; }
@@ -2345,8 +2348,7 @@ section.tight { padding: 28px 0; }
 .test-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
 @media (max-width: 760px) { .test-grid { grid-template-columns: 1fr; } }
 .test-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
+  background: #f5f1fc; /* soft lavender - light but not white */
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   box-shadow: var(--shadow);
@@ -2407,8 +2409,7 @@ section.tight { padding: 28px 0; }
 
 .sec-group {
   position: relative;
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
+  background: #f5f1fc; /* soft lavender - light but not white */
   border: 1px solid var(--glass-border);
   border-radius: 18px;
   box-shadow: var(--shadow);
@@ -2993,3 +2994,15 @@ section.tight { padding: 28px 0; }
   padding: 2px 10px;
   white-space: nowrap;
 }
+
+/* Certification badges in the footer bottom bar */
+.footer-certs { display: inline-flex; gap: 16px; flex-wrap: wrap; }
+.footer-certs span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+.footer-certs svg { color: var(--coral, #FF7555); }
