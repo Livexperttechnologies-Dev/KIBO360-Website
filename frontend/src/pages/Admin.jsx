@@ -315,8 +315,11 @@ function LeadsTab({ token, notify }) {
 
   const exportCsv = (rows) => {
     const table = [
-      ["Received", "Name", "Email", "Phone", "Organization", "Interest", "Message", "Status"],
-      ...rows.map((l) => [l.receivedAt, l.name, l.email, l.phone, l.organization, l.product, l.message, l.status || "new"]),
+      ["Received", "Name", "Email", "Phone", "Organization", "Interest", "Demo Date", "Demo Time", "Message", "Status"],
+      ...rows.map((l) => [
+        l.receivedAt, l.name, l.email, l.phone, l.organization, l.product,
+        l.preferredDate || "", l.preferredTime || "", l.message, l.status || "new",
+      ]),
     ];
     const csv = table.map((r) => r.map((c) => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
     const a = document.createElement("a");
@@ -363,7 +366,14 @@ function LeadsTab({ token, notify }) {
                 <td>{new Date(l.receivedAt).toLocaleString()}</td>
                 <td><strong>{l.name}</strong>{l.organization ? <div className="muted">{l.organization}</div> : null}</td>
                 <td><a href={`mailto:${l.email}`}>{l.email}</a>{l.phone ? <div className="muted">{l.phone}</div> : null}</td>
-                <td>{l.product}</td>
+                <td>
+                  {l.product}
+                  {(l.preferredDate || l.preferredTime) && (
+                    <div className="lead-slot">
+                      <Icon name="calendar" size={12} /> {l.preferredDate || "Any date"}{l.preferredTime ? ` · ${l.preferredTime}` : ""}
+                    </div>
+                  )}
+                </td>
                 <td className="lead-msg">{l.message}</td>
                 <td>
                   <select value={l.status || "new"} onChange={(e) => setStatus(l.id, e.target.value)}>

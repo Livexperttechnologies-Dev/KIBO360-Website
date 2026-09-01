@@ -2978,3 +2978,18 @@ section.tight { padding: 28px 0; }
   font-weight: 700;
 }
 .admin-faq-row textarea { width: 100%; }
+
+/* Demo slot line on a lead row */
+.lead-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: rgba(108, 34, 214, 0.07);
+  border-radius: 50px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}

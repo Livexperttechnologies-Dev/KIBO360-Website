@@ -3,7 +3,14 @@ import Icon from "./Icon.jsx";
 import { products } from "../data/siteData.js";
 import { API_BASE } from "../lib/apiBase.js";
 
-const initial = { name: "", email: "", phone: "", organization: "", product: "General", message: "" };
+const initial = {
+  name: "", email: "", phone: "", organization: "", product: "General", message: "",
+  preferredDate: "", preferredTime: "",
+};
+
+export const TIME_SLOTS = [
+  "10:00 AM", "11:00 AM", "12:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM", "6:00 PM",
+];
 
 export default function ContactForm() {
   const [form, setForm] = useState(initial);
@@ -79,6 +86,26 @@ export default function ContactForm() {
         <label>
           Organization
           <input name="organization" value={form.organization} onChange={update} placeholder="Hospital / Clinic name" />
+        </label>
+      </div>
+
+      <div className="form-row">
+        <label>
+          Preferred demo date
+          <input
+            name="preferredDate"
+            type="date"
+            value={form.preferredDate}
+            onChange={update}
+            min={new Date().toISOString().slice(0, 10)}
+          />
+        </label>
+        <label>
+          Preferred time
+          <select name="preferredTime" value={form.preferredTime} onChange={update}>
+            <option value="">Any time</option>
+            {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
         </label>
       </div>
 

@@ -255,8 +255,11 @@ async function sendNotifications(submission) {
         text:
           `New enquiry received on kibo360.in\n\n` +
           `Name: ${submission.name}\nEmail: ${submission.email}\nPhone: ${submission.phone || "-"}\n` +
-          `Organization: ${submission.organization || "-"}\nInterest: ${submission.product}\n\n` +
-          `Message:\n${submission.message}\n\nReceived: ${submission.receivedAt}`,
+          `Organization: ${submission.organization || "-"}\nInterest: ${submission.product}\n` +
+          (submission.preferredDate || submission.preferredTime
+            ? `Preferred demo slot: ${submission.preferredDate || "any date"}${submission.preferredTime ? ` at ${submission.preferredTime}` : ""}\n`
+            : "") +
+          `\nMessage:\n${submission.message}\n\nReceived: ${submission.receivedAt}`,
       }).catch((e) => console.error("[mail] team notify failed:", e.message));
     }
     if (notifications.visitorAutoReply && submission.email) {
@@ -328,6 +331,8 @@ app.post("/api/contact", (req, res) => {
     organization: String(organization || "").trim().slice(0, 200),
     product: String(product || "General").trim().slice(0, 80),
     message: String(message).trim().slice(0, 5000),
+    preferredDate: String(req.body?.preferredDate || "").trim().slice(0, 60),
+    preferredTime: String(req.body?.preferredTime || "").trim().slice(0, 40),
   };
   const list = loadSubmissions();
   list.push(submission);

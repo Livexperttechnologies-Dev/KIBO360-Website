@@ -145,6 +145,21 @@ const NUDGES = [
 ];
 const NUDGE_DEFAULT = "Welcome to Kibo360! Can I help you find the right solution for your business?";
 
+// In-chat demo booking wizard
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const TIME_SLOTS = ["10:00 AM", "11:00 AM", "12:00 PM", "2:00 PM", "4:00 PM", "6:00 PM"];
+const dateChips = () =>
+  Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1 + i);
+    return {
+      label: d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }),
+      type: "wizard",
+      value: d.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+    };
+  });
+const timeChips = () => TIME_SLOTS.map((t) => ({ label: t, type: "wizard", value: t }));
+
 function getVisitorId() {
   try {
     let id = localStorage.getItem("kibo360-visitor-id");
@@ -177,6 +192,9 @@ export default function FloatingWidgets() {
   const [started, setStarted] = useState(() => {
     try { return localStorage.getItem("kibo360-chat-started") === "1"; } catch { return false; }
   });
+  const [booking, setBooking] = useState(null); // { step, data } while the demo wizard runs
+  const bookingRef = useRef(null);
+  useEffect(() => { bookingRef.current = booking; }, [booking]);
   const { openDemo } = useDemoModal();
   const { pathname } = useLocation();
   const bodyRef = useRef(null);
@@ -372,8 +390,133 @@ export default function FloatingWidgets() {
     }
   };
 
+  const botSay = (text, actions = []) => {
+    setMessages((m) => [...m, { from: "bot", text, actions }]);
+    syncMessage("bot", text);
+  };
+
+  const submitBooking = (data) => {
+    botSay("One moment - booking your demo…");
+    fetch(`${API_BASE}/api/contact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: data.name,
+        email: data.email,
+        phone: data.phone || "",
+        organization: data.organization || "",
+        product: "Demo Booking (Chat)",
+        message: `Demo booked via the chatbot for ${data.date} at ${data.time}.`,
+        preferredDate: data.date,
+        preferredTime: data.time,
+      }),
+    })
+      .then((r) => r.json().then((d) => ({ ok: r.ok && d.ok })))
+      .then(({ ok }) => {
+        if (ok) {
+          setBooking(null);
+          botSay(
+            `You're booked, ${data.name}! We've noted ${data.date} at ${data.time}. Our team will confirm on ${data.email}${data.phone ? ` or ${data.phone}` : ""} shortly. Anything else I can help with?`
+          );
+        } else {
+          botSay("Hmm, that didn't go through. Want to try again?", [
+            { label: "Try Again", type: "wizard", value: "confirm" },
+            { label: "Cancel", type: "wizard", value: "cancel" },
+          ]);
+        }
+      })
+      .catch(() =>
+        botSay("I couldn't reach the server just now. Want to try again?", [
+          { label: "Try Again", type: "wizard", value: "confirm" },
+          { label: "Cancel", type: "wizard", value: "cancel" },
+        ])
+      );
+  };
+
+  const handleBookingInput = (raw) => {
+    const b = bookingRef.current;
+    if (!b) return;
+    const text = String(raw).trim();
+    const lower = text.toLowerCase();
+    if (lower === "cancel") {
+      setBooking(null);
+      botSay("No problem - booking cancelled. Ask me anything else, or type 'book a demo' whenever you're ready.");
+      return;
+    }
+    if (lower === "restart") {
+      setBooking({ step: "name", data: {} });
+      botSay("Sure, let's start over. What's your name?");
+      return;
+    }
+    const data = { ...b.data };
+    switch (b.step) {
+      case "name":
+        if (text.length < 2) { botSay("Could you share your name? (or type 'cancel' to stop)"); return; }
+        data.name = text.slice(0, 120);
+        setBooking({ step: "email", data });
+        botSay(`Nice to meet you, ${data.name}! What's your email address?`);
+        return;
+      case "email":
+        if (!EMAIL_RE.test(text)) { botSay("That doesn't look like an email address - could you check it? (or type 'cancel')"); return; }
+        data.email = text.slice(0, 200);
+        setBooking({ step: "phone", data });
+        botSay("Got it. What's your phone number? (type 'skip' to leave it out)");
+        return;
+      case "phone":
+        data.phone = lower === "skip" ? "" : text.slice(0, 40);
+        setBooking({ step: "organization", data });
+        botSay("Which hospital, clinic or organisation are you from? (or type 'skip')");
+        return;
+      case "organization":
+        data.organization = lower === "skip" ? "" : text.slice(0, 200);
+        setBooking({ step: "date", data });
+        botSay("What date works best for your demo? Pick one below or type a date:", dateChips());
+        return;
+      case "date":
+        if (text.length < 3) { botSay("Please pick a date below or type one:", dateChips()); return; }
+        data.date = text.slice(0, 60);
+        setBooking({ step: "time", data });
+        botSay("And what time suits you?", timeChips());
+        return;
+      case "time":
+        if (text.length < 2) { botSay("Please pick a time below or type one:", timeChips()); return; }
+        data.time = text.slice(0, 40);
+        setBooking({ step: "confirm", data });
+        botSay(
+          `Here's your demo booking:\n• Name: ${data.name}\n• Email: ${data.email}\n• Phone: ${data.phone || "-"}\n• Organisation: ${data.organization || "-"}\n• Date: ${data.date}\n• Time: ${data.time}\n\nShall I confirm it?`,
+          [
+            { label: "Confirm Booking", type: "wizard", value: "confirm" },
+            { label: "Start Over", type: "wizard", value: "restart" },
+            { label: "Cancel", type: "wizard", value: "cancel" },
+          ]
+        );
+        return;
+      case "confirm":
+        if (lower === "confirm" || lower === "yes" || lower === "ok" || lower === "okay") { submitBooking(data); return; }
+        botSay("Tap Confirm Booking to finish, Start Over to re-enter details, or Cancel to stop.", [
+          { label: "Confirm Booking", type: "wizard", value: "confirm" },
+          { label: "Start Over", type: "wizard", value: "restart" },
+          { label: "Cancel", type: "wizard", value: "cancel" },
+        ]);
+        return;
+      default:
+        setBooking(null);
+    }
+  };
+
+  const startBooking = () => {
+    if (bookingRef.current) return;
+    setBooking({ step: "name", data: {} });
+    botSay("Great - let's book your free demo right here! First, what's your name? (type 'cancel' anytime to stop)");
+  };
+
   const runAction = (a) => {
-    if (a.type === "demo") { setOpen(false); openDemo(); }
+    if (a.type === "demo") { startBooking(); }
+    else if (a.type === "wizard") {
+      setMessages((m) => [...m, { from: "user", text: a.label || a.value }]);
+      syncMessage("visitor", a.label || a.value);
+      handleBookingInput(a.value);
+    }
     else if (a.type === "wa") window.open(waHref, "_blank", "noopener");
     else if (a.type === "tel") window.location.href = `tel:${company.phone.replace(/[^+\d]/g, "")}`;
     else if (a.type === "link") { window.location.href = a.href; }
@@ -384,6 +527,12 @@ export default function FloatingWidgets() {
     if (!clean) return;
     setMessages((m) => [...m, { from: "user", text: clean }]);
     setInput("");
+    if (bookingRef.current) {
+      // The demo wizard owns the conversation until it finishes or is cancelled
+      syncMessage("visitor", clean);
+      handleBookingInput(clean);
+      return;
+    }
     const synced = await syncMessage("visitor", clean);
     const joined = synced ? !!synced.agentJoined : agentJoined;
     if (synced) { setAgentJoined(joined); setAgentOnline(!!synced.agentOnline); }
@@ -458,11 +607,13 @@ export default function FloatingWidgets() {
                     )}
                   </div>
                 ))}
-                <div className="chat-quick">
-                  {quickReplies.map((q) => (
-                    <button key={q} type="button" onClick={() => send(q)}>{q}</button>
-                  ))}
-                </div>
+                {!booking && (
+                  <div className="chat-quick">
+                    {quickReplies.map((q) => (
+                      <button key={q} type="button" onClick={() => send(q)}>{q}</button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <form
