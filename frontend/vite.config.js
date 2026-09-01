@@ -10,7 +10,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://localhost:5001",
+        target: "https://api.kibo360.in",
         changeOrigin: true,
       },
     },
