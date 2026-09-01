@@ -116,7 +116,7 @@ function Login({ onSignedIn }) {
     e.preventDefault();
     setBusy(true); setError("");
     try {
-      const d = await api("/api/admin/login", { method: "POST", body: { email, password } });
+      const d = await api("/https://api.kibo360.in/api/admin/login", { method: "POST", body: { email, password } });
       onSignedIn(d.token, d.user);
     } catch (err) {
       setError(err.message);
@@ -148,16 +148,16 @@ function Login({ onSignedIn }) {
 function LeadsTab({ token, notify }) {
   const [leads, setLeads] = useState(null);
   const load = useCallback(() => {
-    api("/api/admin/leads", { token }).then((d) => setLeads(d.leads)).catch((e) => notify(e.message));
+    api("/https://api.kibo360.in/api/admin/leads", { token }).then((d) => setLeads(d.leads)).catch((e) => notify(e.message));
   }, [token, notify]);
   useEffect(load, [load]);
 
   const setStatus = (id, status) =>
-    api(`/api/admin/leads/${id}`, { method: "PATCH", body: { status }, token })
+    api(`/https://api.kibo360.in/api/admin/leads/${id}`, { method: "PATCH", body: { status }, token })
       .then(load).catch((e) => notify(e.message));
   const remove = (id) => {
     if (!window.confirm("Delete this lead permanently?")) return;
-    api(`/api/admin/leads/${id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
+    api(`/https://api.kibo360.in/api/admin/leads/${id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
   };
 
   if (!leads) return <p>Loading leads…</p>;
@@ -203,14 +203,14 @@ function LeadsTab({ token, notify }) {
 function SettingsTab({ token, notify, section }) {
   const [settings, setSettings] = useState(null);
   useEffect(() => {
-    api("/api/admin/settings", { token }).then((d) => setSettings(d.settings)).catch((e) => notify(e.message));
+    api("/https://api.kibo360.in/api/admin/settings", { token }).then((d) => setSettings(d.settings)).catch((e) => notify(e.message));
   }, [token, notify]);
 
   if (!settings) return <p>Loading settings…</p>;
   const value = settings[section];
   const update = (patch) => setSettings({ ...settings, [section]: { ...value, ...patch } });
   const save = () =>
-    api("/api/admin/settings", { method: "PUT", body: { [section]: value }, token })
+    api("/https://api.kibo360.in/api/admin/settings", { method: "PUT", body: { [section]: value }, token })
       .then(() => notify("Saved. The website picks this up immediately."))
       .catch((e) => notify(e.message));
 
@@ -312,23 +312,23 @@ function UsersTab({ token, notify }) {
   const [users, setUsers] = useState(null);
   const [draft, setDraft] = useState({ email: "", name: "", password: "", permissions: {} });
   const load = useCallback(() => {
-    api("/api/admin/users", { token }).then((d) => setUsers(d.users)).catch((e) => notify(e.message));
+    api("/https://api.kibo360.in/api/admin/users", { token }).then((d) => setUsers(d.users)).catch((e) => notify(e.message));
   }, [token, notify]);
   useEffect(load, [load]);
 
   const create = () =>
-    api("/api/admin/users", { method: "POST", body: draft, token })
+    api("/https://api.kibo360.in/api/admin/users", { method: "POST", body: draft, token })
       .then(() => { setDraft({ email: "", name: "", password: "", permissions: {} }); load(); notify("User created."); })
       .catch((e) => notify(e.message));
   const togglePerm = (u, key) =>
-    api(`/api/admin/users/${u.id}`, {
+    api(`/https://api.kibo360.in/api/admin/users/${u.id}`, {
       method: "PATCH",
       body: { permissions: { ...u.permissions, [key]: !u.permissions[key] } },
       token,
     }).then(load).catch((e) => notify(e.message));
   const remove = (u) => {
     if (!window.confirm(`Remove access for ${u.email}?`)) return;
-    api(`/api/admin/users/${u.id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
+    api(`/https://api.kibo360.in/api/admin/users/${u.id}`, { method: "DELETE", token }).then(load).catch((e) => notify(e.message));
   };
 
   if (!users) return <p>Loading users…</p>;
@@ -394,7 +394,7 @@ function SecurityTab({ token, notify }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const change = () =>
-    api("/api/admin/password", { method: "POST", body: { current, next }, token })
+    api("/https://api.kibo360.in/api/admin/password", { method: "POST", body: { current, next }, token })
       .then(() => { setCurrent(""); setNext(""); notify("Password changed."); })
       .catch((e) => notify(e.message));
   return (

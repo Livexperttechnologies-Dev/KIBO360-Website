@@ -8,11 +8,5 @@ export default defineConfig({
   server: {
     port: 3001,
     strictPort: true,
-    proxy: {
-      "/api": {
-        target: "https://api.kibo360.in",
-        changeOrigin: true,
-      },
-    },
   },
 });
