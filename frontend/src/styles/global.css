@@ -2348,8 +2348,9 @@ section.tight { padding: 28px 0; }
 .test-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
 @media (max-width: 760px) { .test-grid { grid-template-columns: 1fr; } }
 .test-card {
-  background: #f5f1fc; /* soft lavender - light but not white */
-  border: 1px solid var(--glass-border);
+  /* Pastel take on the brand gradient (violet -> pink -> coral) */
+  background: linear-gradient(135deg, #f5f0fe 0%, #fdf0f7 55%, #fff3ee 100%);
+  border: 1px solid rgba(108, 34, 214, 0.14);
   border-radius: 20px;
   box-shadow: var(--shadow);
   padding: 34px 30px;
@@ -2409,8 +2410,9 @@ section.tight { padding: 28px 0; }
 
 .sec-group {
   position: relative;
-  background: #f5f1fc; /* soft lavender - light but not white */
-  border: 1px solid var(--glass-border);
+  /* Pastel take on the brand gradient (violet -> pink -> coral) */
+  background: linear-gradient(135deg, #f5f0fe 0%, #fdf0f7 55%, #fff3ee 100%);
+  border: 1px solid rgba(108, 34, 214, 0.14);
   border-radius: 18px;
   box-shadow: var(--shadow);
   padding: 20px 22px;
