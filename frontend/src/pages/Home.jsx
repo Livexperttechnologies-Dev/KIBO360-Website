@@ -140,7 +140,7 @@ export default function Home() {
               <span className="hero-badge soft"><Icon name="lock" size={14} /> Secure &amp; Compliant</span>
             </div></div>
             <h1>
-              Everything your business needs,{" "}
+              One Platform.{" "}
               <span className="gradient-text">connected in one platform.</span>
             </h1>
             <p className="hero-text">
@@ -150,9 +150,9 @@ export default function Home() {
               from one place.
             </p>
             <div className="hero-actions">
-              <Link to="/products" className="btn btn-primary btn-lg">Explore Kibo360</Link>
+              <Link to="/products" className="btn btn-primary btn-lg">Find the Right Solution</Link>
               <button type="button" className="btn btn-outline btn-lg" onClick={openDemo}>
-                Simplify your Business Operations
+                Book a Free Demo
               </button>
             </div>
             <p className="hero-note">
@@ -579,7 +579,7 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
       <CTABanner
         title="You Run Your Business. We'll Handle the Software."
         text="See how KIBO360 unifies your entire organization - book a personalized demo."
-        primary={{ label: "Explore Kibo360", to: "/products" }}
+        primary={{ label: "Find the Right Solution", to: "/products" }}
         secondaryLabel="Talk to Our Team"
       />
     </>
