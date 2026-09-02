@@ -141,7 +141,7 @@ export default function Home() {
             </div></div>
             <h1>
               One Platform.{" "}
-              <span className="gradient-text">connected in one platform.</span>
+              <span className="gradient-text">Design for Every Business.</span>
             </h1>
             <p className="hero-text">
               Stop switching between disconnected tools. Kibo360 brings business
