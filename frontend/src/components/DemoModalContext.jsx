@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import ContactForm from "./ContactForm.jsx";
 import Icon from "./Icon.jsx";
 
-const DemoModalContext = createContext({ openDemo: () => {} });
+const DemoModalContext = createContext({ openDemo: () => {}, closeDemo: () => {} });
 export const useDemoModal = () => useContext(DemoModalContext);
 
 // Auto-popup fires at most once per browser session (and never again once
@@ -27,6 +27,10 @@ export function DemoModalProvider({ children }) {
     const el = restoreFocusRef.current;
     if (el && typeof el.focus === "function") el.focus();
   }, []);
+
+  // Close the modal whenever the route changes (e.g. the form submits and
+  // navigates to /thank-you) so it never lingers over the new page.
+  useEffect(() => { setOpen(false); }, [pathname]);
 
   // Real scroll lock: overflow on <body> does not propagate to the viewport
   // while <html> has overflow-x: clip, so lock the root element itself -
@@ -101,7 +105,7 @@ export function DemoModalProvider({ children }) {
   }, [pathname, openDemo]);
 
   return (
-    <DemoModalContext.Provider value={{ openDemo }}>
+    <DemoModalContext.Provider value={{ openDemo, closeDemo: close }}>
       {children}
       {open && (
         <div

@@ -28,7 +28,11 @@ export default function App() {
           }
         });
       },
-      { threshold: 0.08 }
+      // threshold 0 + a small bottom inset: a fractional threshold can never
+      // fire for sections taller than (viewport / threshold) - on phones the
+      // stacked modules section is ~13000px tall, so 8% could never be
+      // visible at once and the section stayed hidden forever.
+      { threshold: 0, rootMargin: "0px 0px -60px 0px" }
     );
     sections.forEach((s) => {
       s.classList.add("fade-section");

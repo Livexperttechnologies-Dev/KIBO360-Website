@@ -45,7 +45,7 @@ const cmsJsonLd = {
       name: "KIBO360 Clinical Management System (CMS)",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iOS, Android",
-      url: "https://kibo360.in/products/cms",
+      url: "https://kibo360.in/products/clinicalmanagementsoftware",
       description:
         "Clinical Management Software in India - patient management, appointments, clinical records, billing, staff management and reports for clinics and healthcare practices, in one connected system.",
       publisher: { "@id": "https://kibo360.in/#org" },
@@ -70,7 +70,7 @@ export default function ProductCMS() {
       <Seo
         title="Clinical Management System (CMS) - Clinical Management Software in India"
         description="Kibo360 CMS brings patients, appointments, clinical records, billing and staff management together in one connected system - Clinical Management Software for clinics and modern practices in India. Book a demo."
-        path="/products/cms"
+        path="/products/clinicalmanagementsoftware"
         jsonLd={cmsJsonLd}
       />
       <div className="container">
@@ -189,7 +189,7 @@ export default function ProductCMS() {
             Kibo360 CMS gives your clinic one system to bring these moving parts
             together.
           </p>
-          <div className="problem-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+          <div className="problem-grid">
             {problemCards.map((c) => (
               <div key={c.fix} className="pain-card">
                 <span className="pain-icon" aria-hidden="true">
@@ -220,7 +220,7 @@ export default function ProductCMS() {
             ))}
           </div>
           <p style={{ textAlign: "center", margin: "26px auto 0" }}>
-            <Link to="/products" className="btn btn-primary">Explore Kibo360 CMS</Link>
+            <button type="button" className="btn btn-primary" onClick={openDemo}>Explore Kibo360 CMS</button>
           </p>
         </div>
       </section>

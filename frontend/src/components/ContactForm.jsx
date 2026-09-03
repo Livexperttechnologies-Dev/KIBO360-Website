@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Icon from "./Icon.jsx";
+import { useDemoModal } from "./DemoModalContext.jsx";
 import { products } from "../data/siteData.js";
 import { API_BASE } from "../lib/apiBase.js";
 
@@ -14,17 +16,35 @@ export const TIME_SLOTS = [
 
 export default function ContactForm() {
   const [form, setForm] = useState(initial);
-  const [status, setStatus] = useState("idle"); // idle | sending | success | error
+  const [status, setStatus] = useState("idle"); // idle | sending | error
   const [errors, setErrors] = useState({});
-  const successRef = useRef(null);
 
-  // Keep keyboard/screen-reader users oriented when the form swaps to the
-  // success view (the focused submit button unmounts at that moment).
-  useEffect(() => {
-    if (status === "success") successRef.current?.focus();
-  }, [status]);
+  const navigate = useNavigate();
+  const { closeDemo } = useDemoModal();
 
-  const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const update = (e) => {
+    let { name, value } = e.target;
+    // Live input constraints (issue #9) - filters match validate() exactly,
+    // and also catch pasted/autofilled text.
+    if (name === "name") value = value.replace(/[^A-Za-z .'-]/g, "");
+    if (name === "phone") value = value.replace(/[^0-9+\-\s()]/g, "");
+    setForm((f) => ({ ...f, [name]: value }));
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!form.name.trim()) errs.name = "Name is required.";
+    else if (!/^[A-Za-z][A-Za-z .'-]*$/.test(form.name.trim())) errs.name = "Name can contain letters only.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) errs.email = "A valid email is required.";
+    if (form.phone && !/^[+]?[0-9][0-9\s\-()]{6,}$/.test(form.phone.trim())) {
+      errs.phone = "Please enter a valid phone number (digits only).";
+    }
+    if (!form.message.trim()) errs.message = "Message is required.";
+    if (form.preferredTimes.length === 1) {
+      errs.preferredTimes = "Please select 2-3 time slots, so we have a backup if one is busy.";
+    }
+    return errs;
+  };
 
   const toggleSlot = (t) =>
     setForm((f) => ({
@@ -38,10 +58,9 @@ export default function ContactForm() {
 
   const submit = async (e) => {
     e.preventDefault();
-    // Slots are optional, but picking exactly one defeats their purpose -
-    // the team needs a backup in case that slot is busy.
-    if (form.preferredTimes.length === 1) {
-      setErrors({ preferredTimes: "Please select 2-3 time slots, so we have a backup if one is busy." });
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
       setStatus("error");
       return;
     }
@@ -55,30 +74,19 @@ export default function ContactForm() {
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setStatus("success");
         setForm(initial);
+        setStatus("idle");
+        closeDemo(); // if we're inside the modal, close it even when already on /thank-you
+        navigate("/thank-you"); // dedicated thank-you page (issue #12)
       } else {
         setErrors(data.errors || {});
         setStatus("error");
       }
     } catch {
-      setErrors({ _global: "Could not reach the server. Is the backend running on port 5001?" });
+      setErrors({ _global: "Could not reach the server. Please try again, or call us directly." });
       setStatus("error");
     }
   };
-
-  if (status === "success") {
-    return (
-      <div className="form-success" role="status" tabIndex={-1} ref={successRef}>
-        <span className="form-success-icon"><Icon name="check" size={30} strokeWidth={2.4} /></span>
-        <h3>Thank you! Your message has been received.</h3>
-        <p>Our team will get back to you within one business day.</p>
-        <button className="btn btn-primary" onClick={() => setStatus("idle")}>
-          Send another message
-        </button>
-      </div>
-    );
-  }
 
   return (
     <form className="contact-form" onSubmit={submit} noValidate>
@@ -98,7 +106,16 @@ export default function ContactForm() {
       <div className="form-row">
         <label>
           Phone
-          <input name="phone" value={form.phone} onChange={update} placeholder="+91-98xxxxxxx" />
+          <input
+            name="phone"
+            type="tel"
+            inputMode="numeric"
+            value={form.phone}
+            onChange={update}
+            placeholder="+91-98xxxxxxx"
+            aria-invalid={!!errors.phone}
+          />
+          {errors.phone && <span className="field-error" role="alert">{errors.phone}</span>}
         </label>
         <label>
           Organization
@@ -113,7 +130,9 @@ export default function ContactForm() {
           type="date"
           value={form.preferredDate}
           onChange={update}
-          min={new Date().toISOString().slice(0, 10)}
+          // min is set client-side so prerendered HTML never bakes a stale
+          // build date into the picker
+          ref={(el) => { if (el) el.min = new Date().toISOString().slice(0, 10); }}
         />
       </label>
 

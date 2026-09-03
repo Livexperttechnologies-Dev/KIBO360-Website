@@ -16,21 +16,31 @@ import {
 // (Home-page only; /products and the footer keep their own copy).
 const homeProductCards = [
   {
-    name: "HMS", short: "HMS", live: true, route: "/products/hms", subdomain: "hms.kibo360.in",
+    name: "HMS", short: "HMS", live: true, route: "/products/hospitalmanagementsoftware", subdomain: "hms.kibo360.in",
     blurb: "Operations, Patients, Auto Updates, Billings with Data Security",
     highlights: ["Patient Access & OPD/IPD", "EMR / EHR", "Diagnostics & Pharmacy"],
   },
   {
-    name: "CMS", short: "CMS", live: true, route: "/products/cms", subdomain: "cms.kibo360.in",
+    name: "CMS", short: "CMS", live: true, route: "/products/clinicalmanagementsoftware", subdomain: "cms.kibo360.in",
     blurb: "Streamline clinical operations, patient records, care workflows, and healthcare processes.",
     highlights: ["Appointments & Queue", "Doctor EMR & e-Rx", "Billing & GST Invoicing"],
   },
-  { name: "ERP", icon: "banknote", blurb: "Manage core business operations, resources, and processes." },
-  { name: "CRM", icon: "heart", subdomain: "crm.kibo360.in", blurb: "Manage customer relationships, sales, and interactions." },
-  
-  { name: "LIS", icon: "flask", subdomain: "lis.kibo360.in", blurb: "Manage laboratory processes, records, and reporting with instrument integration." },
-  
-  { name: "Inventory", icon: "box", subdomain: "inventory.kibo360.in", blurb: "Track stock, manage inventory levels, and keep products moving efficiently." },
+  {
+    name: "ERP", icon: "banknote", blurb: "Manage core business operations, resources, and processes.",
+    highlights: ["Finance & Accounting", "Procurement & Vendors", "Operations & Reporting"],
+  },
+  {
+    name: "CRM", icon: "heart", subdomain: "crm.kibo360.in", blurb: "Manage customer relationships, sales, and interactions.",
+    highlights: ["Leads & Pipeline", "Customer 360 View", "Campaigns & Follow-Ups"],
+  },
+  {
+    name: "LIS", icon: "flask", subdomain: "lis.kibo360.in", blurb: "Manage laboratory processes, records, and reporting with instrument integration.",
+    highlights: ["Sample Lifecycle", "Instrument Integration", "Smart Lab Reports"],
+  },
+  {
+    name: "Inventory", icon: "box", subdomain: "inventory.kibo360.in", blurb: "Track stock, manage inventory levels, and keep products moving efficiently.",
+    highlights: ["Stock & Batch Tracking", "Purchase & Reorder", "Expiry Management"],
+  },
   { name: "And More", icon: "sparkle", moreLink: true, blurb: "Explore solutions built for other business needs as Kibo360 continues to grow." },
 ];
 
@@ -95,7 +105,6 @@ function EcosystemOrbit() {
 }
 
 export default function Home() {
-  const [marqueePaused, setMarqueePaused] = useState(false);
   const { openDemo } = useDemoModal();
 
   // Product scroller arrow controls
@@ -120,6 +129,23 @@ export default function Home() {
     const step = (card ? card.getBoundingClientRect().width : 280) + 18;
     el.scrollBy({ left: dir * step, behavior: "smooth" });
   };
+
+  // Auto-slide the product cards; pauses while hovering / touching and loops
+  // back to the start at the end. Skipped for reduced-motion users.
+  const autoPausedRef = useRef(false);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const iv = setInterval(() => {
+      const el = scrollerRef.current;
+      if (!el || autoPausedRef.current || document.hidden) return;
+      if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 8) {
+        el.scrollTo({ left: 0, behavior: "smooth" });
+      } else {
+        scrollByCard(1);
+      }
+    }, 3500);
+    return () => clearInterval(iv);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -279,7 +305,16 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
               <Icon name="chevron-right" size={18} strokeWidth={2.2} />
             </button>
           </div>
-          <div className="product-scroller compact" role="list" ref={scrollerRef} onScroll={updateArrows}>
+          <div
+            className="product-scroller compact"
+            role="list"
+            ref={scrollerRef}
+            onScroll={updateArrows}
+            onMouseEnter={() => { autoPausedRef.current = true; }}
+            onMouseLeave={() => { autoPausedRef.current = false; }}
+            onTouchStart={() => { autoPausedRef.current = true; }}
+            onTouchEnd={() => { setTimeout(() => { autoPausedRef.current = false; }, 4000); }}
+          >
             {homeProductCards.map((p) => (
               <article
                 key={p.name}
@@ -450,10 +485,7 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
             title="Connects with everything you already use."
           />
         </div>
-        <div
-          className={`marquee ${marqueePaused ? "paused" : ""}`}
-          aria-label="KIBO360 integrations"
-        >
+        <div className="marquee" aria-label="KIBO360 integrations">
           <div className="marquee-track">
             {[...integrations, ...integrations].map((item, idx) => (
               <span key={`${item}-${idx}`} className="chip" aria-hidden={idx >= integrations.length}>
@@ -461,17 +493,6 @@ Secure, scalable, and built for the future ready. {/*Every product runs on its o
               </span>
             ))}
           </div>
-        </div>
-        {/* Accessible pause control (WCAG 2.2.2) for the auto-scrolling strip */}
-        <div className="container" style={{ textAlign: "center" }}>
-          <button
-            type="button"
-            className="marquee-pause"
-            aria-pressed={marqueePaused}
-            onClick={() => setMarqueePaused((p) => !p)}
-          >
-            {marqueePaused ? "▶ Play animation" : "❚❚ Pause animation"}
-          </button>
         </div>
       </section>
 

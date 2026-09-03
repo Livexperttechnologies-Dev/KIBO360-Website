@@ -13,9 +13,17 @@ const app = (
 );
 
 // Prerendered pages ship with real HTML in #root - hydrate it so React takes
-// over without repainting; empty shells (e.g. /admin) render from scratch.
-if (container.hasChildNodes()) {
+// over without repainting. If a host's SPA fallback served the WRONG page's
+// prerendered file (data-prerendered-route differs from the URL), or the
+// shell is empty, render from scratch instead of mis-hydrating.
+const prerenderedRoute = container.getAttribute("data-prerendered-route");
+const matchesRoute =
+  prerenderedRoute &&
+  (window.location.pathname === prerenderedRoute ||
+    window.location.pathname === `${prerenderedRoute}/`);
+if (container.hasChildNodes() && matchesRoute) {
   ReactDOM.hydrateRoot(container, app);
 } else {
+  container.replaceChildren();
   ReactDOM.createRoot(container).render(app);
 }

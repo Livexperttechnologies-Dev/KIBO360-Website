@@ -12,7 +12,7 @@ export const company = {
   website: "www.kibo360.in",
   address: "Bhutani Cyber Park, Block C, Sector 62, Noida - 201305, India",
   phone: "+91-800 800 5672",
-  email: "info@livexperttechnologies.com",
+  email: "support@kibo360.in", // public support inbox - make sure this mailbox exists!
 };
 
 // Deck p.2 - ecosystem hub around KIBO360
@@ -63,7 +63,7 @@ export const products = [
     name: "Hospital Management Software",
     status: "Live",
     subdomain: "hms.kibo360.in",
-    route: "/products/hms",
+    route: "/products/hospitalmanagementsoftware",
     blurb:
       "End-to-end hospital operations - OPD/IPD, EMR/EHR, diagnostics, pharmacy, finance ERP, HR & payroll, and AI analytics on one intelligent database.",
     highlights: ["Patient Access & OPD/IPD", "EMR / EHR", "Diagnostics & Pharmacy", "Finance, HR & Revenue Cycle"],
@@ -74,7 +74,7 @@ export const products = [
     name: "Clinic Management Software",
     status: "Live",
     subdomain: "cms.kibo360.in",
-    route: "/products/cms",
+    route: "/products/clinicalmanagementsoftware",
     blurb:
       "Everything a modern clinic needs - appointments, queue & token, doctor EMR, e-prescriptions, billing and follow-ups - ready in days, not months.",
     highlights: ["Appointments & Queue", "Doctor EMR & e-Rx", "Billing & GST Invoicing", "WhatsApp/SMS Reminders"],

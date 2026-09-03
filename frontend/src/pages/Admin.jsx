@@ -748,7 +748,7 @@ function SettingsTab({ token, notify, section }) {
         <label>Default popup message<textarea rows="2" value={value.nudgeDefault || ""} onChange={(e) => update({ nudgeDefault: e.target.value })} /></label>
         {nudges.map((n, i) => (
           <div key={i} className="admin-faq-row">
-            <input placeholder="Page path (e.g. /products/hms)" value={n.path || ""} onChange={(e) => setNudge(i, { path: e.target.value })} />
+            <input placeholder="Page path (e.g. /products/hospitalmanagementsoftware)" value={n.path || ""} onChange={(e) => setNudge(i, { path: e.target.value })} />
             <textarea rows="2" placeholder="Popup message for this page" value={n.text || ""} onChange={(e) => setNudge(i, { text: e.target.value })} />
             <button type="button" className="admin-del" aria-label="Delete popup rule" onClick={() => update({ nudges: nudges.filter((_, j) => j !== i) })}>
               <Icon name="close" size={14} strokeWidth={2.4} />

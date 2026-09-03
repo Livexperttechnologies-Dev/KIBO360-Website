@@ -7,11 +7,11 @@ const SITE_NAME = "KIBO360";
  * Per-page SEO for the SPA: document title, meta description, canonical URL,
  * Open Graph / Twitter tags and optional JSON-LD structured data.
  */
-export default function Seo({ title, description, path = "/", jsonLd = null }) {
+export default function Seo({ title, description, path = "/", jsonLd = null, noindex = false }) {
   // During build-time prerendering there is no document to mutate - hand the
   // values to the prerender script instead, which writes real <head> tags.
   if (import.meta.env.SSR) {
-    globalThis.__SEO__ = { title, description, path, jsonLd };
+    globalThis.__SEO__ = { title, description, path, jsonLd, noindex };
   }
   useEffect(() => {
     const fullTitle = title.includes(SITE_NAME) ? title : `${title} | ${SITE_NAME}`;
@@ -45,6 +45,9 @@ export default function Seo({ title, description, path = "/", jsonLd = null }) {
     }
     canonical.setAttribute("href", SITE_URL + path);
 
+    // noindex pages (e.g. /thank-you) must not enter search results
+    setMeta("name", "robots", noindex ? "noindex, nofollow" : "index, follow, max-image-preview:large");
+
     // Page-specific JSON-LD (replaced on every route change)
     const JSONLD_ID = "page-jsonld";
     document.getElementById(JSONLD_ID)?.remove();
@@ -56,7 +59,7 @@ export default function Seo({ title, description, path = "/", jsonLd = null }) {
       document.head.appendChild(script);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, description, path, JSON.stringify(jsonLd)]);
+  }, [title, description, path, noindex, JSON.stringify(jsonLd)]);
 
   return null;
 }

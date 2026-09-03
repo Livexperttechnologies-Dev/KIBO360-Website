@@ -18,7 +18,7 @@ const hmsJsonLd = {
       alternateName: "KIBO360 HIS - Hospital Information System",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iOS, Android",
-      url: "https://kibo360.in/products/hms",
+      url: "https://kibo360.in/products/hospitalmanagementsoftware",
       description:
         "AI-powered, cloud-native hospital management software unifying OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance ERP, HR & payroll and analytics on one intelligent database.",
       publisher: { "@id": "https://kibo360.in/#org" },
@@ -306,12 +306,35 @@ export default function ProductHMS() {
     };
   }, []);
 
+  // Rail navigation: native #anchor scrolling breaks for chapters already
+  // pinned by the stacking deck (a stuck card reports its pinned position,
+  // so jumping UP to an earlier module went nowhere). Compute each chapter's
+  // NATURAL position from the flow container + preceding chapter heights.
+  const jumpToModule = (e, id) => {
+    e.preventDefault();
+    const flow = document.querySelector(".modules-flow");
+    const idx = hms.modules.findIndex((m) => m.id === id);
+    if (!flow || idx < 0) return;
+    const chapters = flow.querySelectorAll(".module-chapter");
+    let y = flow.getBoundingClientRect().top + window.scrollY;
+    for (let i = 0; i < idx && i < chapters.length; i++) {
+      const cs = getComputedStyle(chapters[i]);
+      y += chapters[i].offsetHeight + (parseFloat(cs.marginBottom) || 0) + (parseFloat(cs.marginTop) || 0);
+    }
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // On <=1100px the rail itself is a sticky strip above the chapters, so
+    // the landing offset must clear it too.
+    const offset = window.innerWidth <= 1100 ? 160 : 100;
+    window.scrollTo({ top: y - offset, behavior: reduce ? "auto" : "smooth" });
+    window.history.replaceState(null, "", `#${id}`);
+  };
+
   return (
     <>
       <Seo
         title="Hospital Management Software (HMS / HIS) - AI-Powered & Cloud-Native"
         description="KIBO360 HMS unifies OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance ERP, HR & payroll and AI analytics on one intelligent database. 80% faster registration, 98% billing accuracy. Book a free demo."
-        path="/products/hms"
+        path="/products/hospitalmanagementsoftware"
         jsonLd={hmsJsonLd}
       />
       <div className="container">
@@ -506,6 +529,7 @@ export default function ProductHMS() {
                   href={`#${m.id}`}
                   className={`rail-item ${activeModule === m.id ? "active" : ""}`}
                   aria-current={activeModule === m.id ? "true" : undefined}
+                  onClick={(e) => jumpToModule(e, m.id)}
                 >
                   <span className="rail-num">{String(i + 1).padStart(2, "0")}</span>
                   <span>{m.title}</span>

@@ -239,11 +239,12 @@ section.tight { padding: 28px 0; }
   padding: 0;
   cursor: pointer;
 }
-.nav-dropdown:hover .nav-dropdown-label,
+.nav-dropdown.open .nav-dropdown-label,
 .nav-dropdown:focus-within .nav-dropdown-label { color: var(--primary); }
 .caret { transition: transform 0.2s ease; }
-.nav-dropdown:hover .caret,
+.nav-dropdown.open .caret,
 .nav-dropdown:focus-within .caret { transform: rotate(180deg); }
+.nav-dropdown-label { display: inline-flex; align-items: center; gap: 5px; }
 .nav-dropdown-menu {
   position: absolute;
   top: calc(100% + 10px);
@@ -263,7 +264,7 @@ section.tight { padding: 28px 0; }
   visibility: hidden;
   transition: all 0.18s ease;
 }
-.nav-dropdown:hover .nav-dropdown-menu,
+.nav-dropdown.open .nav-dropdown-menu,
 .nav-dropdown:focus-within .nav-dropdown-menu {
   opacity: 1;
   visibility: visible;
@@ -299,7 +300,29 @@ section.tight { padding: 28px 0; }
   }
   .nav-links.open { display: flex; }
   .nav-dropdown { display: none; }
-  .nav-mobile-products { display: flex; flex-direction: column; gap: 14px; padding-left: 14px; border-left: 3px solid var(--line); }
+  .nav-mobile-products { display: flex; flex-direction: column; gap: 12px; }
+  .nav-mob-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .nav-mob-group.open { color: var(--primary); }
+  .nav-mob-group.open .caret { transform: rotate(180deg); }
+  .nav-mob-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-left: 14px;
+    border-left: 3px solid var(--line);
+  }
 }
 
 /* ---------------------------------- Hero ---------------------------------- */
@@ -2643,33 +2666,16 @@ section.tight { padding: 28px 0; }
 }
 .marquee-track .chip { flex: none; margin-right: 12px; }
 @media (hover: hover) {
-  .marquee:hover .marquee-track { animation-play-state: paused; }
+  /* hover-pause removed per issue #3 */
 }
-.marquee.paused .marquee-track { animation-play-state: paused; }
 @keyframes marqueeScroll {
   to { transform: translateX(-50%); }
 }
-.marquee-pause {
-  display: block;
-  margin: 4px auto 0;
-  background: none;
-  border: none;
-  color: var(--body);
-  font-family: var(--font-body);
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 12px 16px; /* comfortable touch target */
-  min-height: 44px;
-  border-radius: 50px;
-}
-.marquee-pause:hover { color: var(--primary); }
 @media (prefers-reduced-motion: reduce) {
   .marquee { -webkit-mask-image: none; mask-image: none; padding-left: 4%; padding-right: 4%; }
   .marquee-track { animation: none; width: auto; flex-wrap: wrap; justify-content: center; gap: 10px; }
   .marquee-track .chip { margin-right: 0; }
   .marquee-track .chip[aria-hidden="true"] { display: none; }
-  .marquee-pause { display: none; }
   /* Other motion not covered by earlier blocks */
   .tab-panel { animation: none; }
   .sector-photo img { transition: none; }
@@ -3032,3 +3038,26 @@ section.tight { padding: 28px 0; }
   color: #fff;
 }
 .slot-pills button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---- Issue-list fixes (KIBO360 website issues.xlsx) ---------------------- */
+
+/* #8: keep the contact/demo form inside the viewport on small screens */
+.contact-form input,
+.contact-form select,
+.contact-form textarea { width: 100%; min-width: 0; max-width: 100%; }
+.form-row > label { min-width: 0; }
+
+/* #6: problem cards read left-aligned even when space is tight */
+.pain-card, .pain-card > div { text-align: left; }
+
+/* #21: patient-journey flow becomes a vertical chain on phones */
+@media (max-width: 640px) {
+  .workflow { flex-direction: column; align-items: center; gap: 8px; }
+  .workflow-arrow { transform: rotate(90deg); display: block; line-height: 1; }
+  .workflow-step { width: min(320px, 90%); justify-content: flex-start; }
+}
+
+/* #22: CTA banner buttons centered on mobile (consistent with About Us) */
+@media (max-width: 640px) {
+  .cta-actions { justify-content: center; }
+}

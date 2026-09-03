@@ -16,7 +16,7 @@ const contactJsonLd = {
       "@type": "ContactPoint",
       contactType: "sales",
       telephone: "+91-800-800-5672",
-      email: "info@livexperttechnologies.com",
+      email: company.email,
       areaServed: "IN",
       availableLanguage: ["en", "hi"],
     },
@@ -53,7 +53,7 @@ export default function Contact() {
     <>
       <Seo
         title="Contact Us - Book a Free Demo of KIBO360 HMS or CMS"
-        description="Book a free demo of KIBO360 Hospital or Clinic Management Software. Call +91-800 800 5672, email info@livexperttechnologies.com, or send us a message - we respond within one business day."
+        description="Book a free demo of KIBO360 Hospital or Clinic Management Software. Call +91-800 800 5672, email support@kibo360.in, or send us a message - we respond within one business day."
         path="/contact"
         jsonLd={contactJsonLd}
       />

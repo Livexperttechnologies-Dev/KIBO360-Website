@@ -51,7 +51,6 @@ export default function Footer() {
             <li><Icon name="map-pin" size={15} /> {company.address}</li>
             <li><Icon name="phone" size={15} /> <a href="tel:+918008005672">{company.phone}</a></li>
             <li><Icon name="mail" size={15} /> <a href={`mailto:${company.email}`}>{company.email}</a></li>
-            <li><Icon name="globe" size={15} /> {company.website}</li>
           </ul>
         </div>
       </div>

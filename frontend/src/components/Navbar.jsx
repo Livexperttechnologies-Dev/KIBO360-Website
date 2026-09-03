@@ -19,10 +19,17 @@ function Logo() {
 }
 
 export default function Navbar() {
-  const [open, setOpen] = useState(false);
-  const close = () => setOpen(false);
+  const [open, setOpen] = useState(false);          // mobile menu
+  const [prodOpen, setProdOpen] = useState(false);  // desktop dropdown
+  const [mobProdOpen, setMobProdOpen] = useState(false); // mobile Products group
   const { openDemo } = useDemoModal();
   const liveProducts = products.filter((p) => p.route);
+  const close = () => {
+    setOpen(false); setProdOpen(false); setMobProdOpen(false);
+    // A just-clicked link keeps :focus-within matched on the dropdown, which
+    // would hold the menu open over the next page - drop focus explicitly.
+    requestAnimationFrame(() => document.activeElement?.blur?.());
+  };
 
   return (
     <header className="navbar">
@@ -33,7 +40,7 @@ export default function Navbar() {
           className="nav-toggle"
           aria-label="Toggle menu"
           aria-expanded={open}
-          onClick={() => setOpen(!open)}
+          onClick={() => { setOpen(!open); setMobProdOpen(false); }}
         >
           <Icon name={open ? "close" : "menu"} size={26} strokeWidth={2} />
         </button>
@@ -41,10 +48,16 @@ export default function Navbar() {
         <nav className={`nav-links ${open ? "open" : ""}`}>
           <NavLink to="/" end onClick={close}>Home</NavLink>
 
-          <div className="nav-dropdown">
-            <button type="button" className="nav-dropdown-label">
+          {/* Desktop: "Products" navigates to the catalog; hovering shows the
+              dropdown, and clicking any entry closes it. */}
+          <div
+            className={`nav-dropdown ${prodOpen ? "open" : ""}`}
+            onMouseEnter={() => setProdOpen(true)}
+            onMouseLeave={() => setProdOpen(false)}
+          >
+            <NavLink to="/products" className="nav-dropdown-label" onClick={close}>
               Products <Icon name="chevron-down" size={15} className="caret" />
-            </button>
+            </NavLink>
             <div className="nav-dropdown-menu">
               {liveProducts.map((p) => (
                 <NavLink key={p.slug} to={p.route} onClick={close}>
@@ -57,12 +70,24 @@ export default function Navbar() {
             </div>
           </div>
 
-          {/* Mobile: dropdown hover doesn't exist, show product links directly */}
+          {/* Mobile: products grouped under a collapsible "Products" item */}
           <div className="nav-mobile-products">
-            {liveProducts.map((p) => (
-              <NavLink key={p.slug} to={p.route} onClick={close}>{p.name}</NavLink>
-            ))}
-            <NavLink to="/products" onClick={close}>View All Products</NavLink>
+            <button
+              type="button"
+              className={`nav-mob-group ${mobProdOpen ? "open" : ""}`}
+              aria-expanded={mobProdOpen}
+              onClick={() => setMobProdOpen((o) => !o)}
+            >
+              Products <Icon name="chevron-down" size={15} className="caret" />
+            </button>
+            {mobProdOpen && (
+              <div className="nav-mob-sub">
+                {liveProducts.map((p) => (
+                  <NavLink key={p.slug} to={p.route} onClick={close}>{p.short} - {p.name}</NavLink>
+                ))}
+                <NavLink to="/products" onClick={close}>View All Products</NavLink>
+              </div>
+            )}
           </div>
 
           <NavLink to="/about" onClick={close}>About Us</NavLink>

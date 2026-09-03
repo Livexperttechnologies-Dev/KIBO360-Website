@@ -7,8 +7,8 @@ export default function FaqSection({ faqs, title = "Frequently asked questions."
       <div className="container" style={{ maxWidth: 860 }}>
         <SectionHeading eyebrow="FAQ" title={title} />
         <div className="faq-list">
-          {faqs.map((f, i) => (
-            <details key={f.q} className="faq-item" open={i === 0}>
+          {faqs.map((f) => (
+            <details key={f.q} className="faq-item">
               <summary>{f.q}</summary>
               <p>{f.a}</p>
             </details>

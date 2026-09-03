@@ -64,7 +64,7 @@ const DEFAULT_INTENTS = [
     answer:
       "KIBO360 HMS runs your entire hospital on one intelligent database - OPD/IPD, EMR/EHR, diagnostics, pharmacy, billing, finance, HR & payroll and AI-powered analytics, with ABHA health IDs built in. Want to see it working on your own workflows?",
     actions: [
-      { label: "Explore HMS", type: "link", href: "/products/hms" },
+      { label: "Explore HMS", type: "link", href: "/products/hospitalmanagementsoftware" },
       { label: "Book a Free Demo", type: "demo" },
     ],
   },
@@ -74,7 +74,7 @@ const DEFAULT_INTENTS = [
     answer:
       "KIBO360 CMS keeps your clinic running smoothly - appointments, queue & token, doctor EMR, e-prescriptions, GST billing, pharmacy and WhatsApp reminders. Most clinics go live within days, and you can upgrade to the full HMS anytime without migrating data.",
     actions: [
-      { label: "Explore CMS", type: "link", href: "/products/cms" },
+      { label: "Explore CMS", type: "link", href: "/products/clinicalmanagementsoftware" },
       { label: "Book a Free Demo", type: "demo" },
     ],
   },
@@ -96,7 +96,7 @@ const DEFAULT_INTENTS = [
     id: "support",
     keywords: "contact, support, help, talk, human, agent, team, call, phone, email",
     answer:
-      "Our team is happy to help:\n• Call +91-800 800 5672\n• Email info@livexperttechnologies.com\n• Or message us on WhatsApp\n\nYou can also simply keep typing here - our support team sees this chat and can jump in anytime.",
+      "Our team is happy to help:\n• Call +91-800 800 5672\n• Email support@kibo360.in\n• Or message us on WhatsApp\n\nYou can also simply keep typing here - our support team sees this chat and can jump in anytime.",
     actions: [
       { label: "WhatsApp Us", type: "wa" },
       { label: "Call +91-800 800 5672", type: "tel" },
@@ -133,8 +133,8 @@ const DEFAULT_INTENTS = [
 ];
 
 const DEFAULT_NUDGES = [
-  { path: "/products/hms", text: "I see you're exploring KIBO360 HMS! Ask me anything - modules, pricing, implementation - or I can book you a quick demo right here." },
-  { path: "/products/cms", text: "Checking out our Clinical Management System? Happy to answer anything - features, pricing, go-live time - or book you a quick demo right here." },
+  { path: "/products/hospitalmanagementsoftware", text: "I see you're exploring KIBO360 HMS! Ask me anything - modules, pricing, implementation - or I can book you a quick demo right here." },
+  { path: "/products/clinicalmanagementsoftware", text: "Checking out our Clinical Management System? Happy to answer anything - features, pricing, go-live time - or book you a quick demo right here." },
   { path: "/products", text: "Finding the right fit? Tell me a little about your organisation and I'll point you to the right product - or show you everything in a quick demo." },
   { path: "/contact", text: "Need a hand reaching us? I can connect you with the team right here in chat, or book you a demo at a time that suits you." },
   { path: "/about", text: "Getting to know Kibo360? Ask me anything about the platform, our certifications, or the team behind it." },
@@ -326,7 +326,11 @@ app.post("/api/contact", (req, res) => {
   const { name, email, phone, organization, product, message } = req.body || {};
   const errors = {};
   if (!name || !String(name).trim()) errors.name = "Name is required.";
+  else if (!/^[A-Za-z][A-Za-z .'-]*$/.test(String(name).trim())) errors.name = "Name can contain letters only.";
   if (!email || !EMAIL_RE.test(String(email).trim())) errors.email = "A valid email is required.";
+  if (phone && String(phone).trim() && !/^[+]?[0-9][0-9\s\-()]{6,}$/.test(String(phone).trim())) {
+    errors.phone = "Please enter a valid phone number.";
+  }
   if (!message || !String(message).trim()) errors.message = "Message is required.";
   if (Object.keys(errors).length > 0) return res.status(400).json({ ok: false, errors });
 
