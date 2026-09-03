@@ -3,6 +3,7 @@
 //   dedicated subdomain https://api.kibo360.in (CORS on the backend allows it).
 // - Everywhere else (localhost dev on 3001, the isolated test server on 4599)
 //   requests stay relative so they hit the local backend via the /api proxy.
-export const API_BASE = /(^|\.)kibo360\.in$/i.test(window.location.hostname)
-  ? "https://api.kibo360.in"
-  : "";
+export const API_BASE =
+  typeof window !== "undefined" && /(^|\.)kibo360\.in$/i.test(window.location.hostname)
+    ? "https://api.kibo360.in"
+    : "";

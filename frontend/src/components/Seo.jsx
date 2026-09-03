@@ -8,6 +8,11 @@ const SITE_NAME = "KIBO360";
  * Open Graph / Twitter tags and optional JSON-LD structured data.
  */
 export default function Seo({ title, description, path = "/", jsonLd = null }) {
+  // During build-time prerendering there is no document to mutate - hand the
+  // values to the prerender script instead, which writes real <head> tags.
+  if (import.meta.env.SSR) {
+    globalThis.__SEO__ = { title, description, path, jsonLd };
+  }
   useEffect(() => {
     const fullTitle = title.includes(SITE_NAME) ? title : `${title} | ${SITE_NAME}`;
     document.title = fullTitle;
