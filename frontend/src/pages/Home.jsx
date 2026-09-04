@@ -150,8 +150,8 @@ export default function Home() {
   return (
     <>
       <Seo
-        title="KIBO360 - Hospital & Clinic Management Software on One Platform"
-        description="KIBO360 is an AI-powered, cloud-native healthcare ERP by Livexpert Technologies. Run your hospital or clinic on one intelligent database - HMS, CMS, diagnostics, pharmacy, billing, finance and HR."
+        title="KIBO360: One Platform Designed for Every Business"
+        description="KIBO360 is an industry-specific business platform that brings HMS, CMS, ERP, CRM and more tools together in one connected solution built around the needs of your business."
         path="/"
         jsonLd={homeJsonLd}
       />
@@ -167,7 +167,7 @@ export default function Home() {
             </div></div>
             <h1>
               One Platform.{" "}
-              <span className="gradient-text">Design for Every Business.</span>
+              <span className="gradient-text">Designed for Every Business.</span>
             </h1>
             <p className="hero-text">
               Stop switching between disconnected tools. Kibo360 brings business
