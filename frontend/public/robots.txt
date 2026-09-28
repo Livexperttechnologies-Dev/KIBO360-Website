@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /admin
-
-Sitemap: https://kibo360.in/sitemap.xml

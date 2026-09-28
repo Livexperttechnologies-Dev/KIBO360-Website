@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import ContactForm from "./ContactForm.jsx";
+import { useCms } from "../cms/content.jsx";
 import Icon from "./Icon.jsx";
 
 const DemoModalContext = createContext({ openDemo: () => {}, closeDemo: () => {} });
@@ -13,6 +14,7 @@ const AUTO_KEY = "kibo360-demo-shown";
 export function DemoModalProvider({ children }) {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
+  const { mode } = useCms();
   const cardRef = useRef(null);
   const restoreFocusRef = useRef(null);
   const downOnOverlay = useRef(false);
@@ -79,9 +81,10 @@ export function DemoModalProvider({ children }) {
   // Home -> the products section; other pages -> the 5th content section
   // (never the CTA banner - popping over a "Book a Demo" button is absurd).
   useEffect(() => {
+    if (mode !== "live") return undefined; // never pop over the editor or a preview
     let shown = false;
     try { shown = !!sessionStorage.getItem(AUTO_KEY); } catch { shown = true; }
-    if (shown) return;
+    if (shown) return undefined;
     const sections = document.querySelectorAll("main section:not(.cta-banner)");
     const target =
       pathname === "/"
@@ -102,7 +105,7 @@ export function DemoModalProvider({ children }) {
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [pathname, openDemo]);
+  }, [pathname, openDemo, mode]);
 
   return (
     <DemoModalContext.Provider value={{ openDemo, closeDemo: close }}>

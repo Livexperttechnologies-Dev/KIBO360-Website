@@ -1,16 +1,19 @@
 {
   "name": "kibo360-backend",
   "version": "1.0.0",
-  "description": "KIBO360 website API - contact & demo requests",
+  "description": "KIBO360 website API + CMS (content, media, SEO, forms, leads, live chat)",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
   },
   "dependencies": {
+    "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "nodemailer": "^9.1.0"
+    "nodemailer": "^9.1.0",
+    "sharp": "^0.33.5"
   }
 }

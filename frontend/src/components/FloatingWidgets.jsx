@@ -570,7 +570,8 @@ export default function FloatingWidgets() {
     }
     else if (a.type === "wa") window.open(waHref, "_blank", "noopener");
     else if (a.type === "tel") window.location.href = `tel:${company.phone.replace(/[^+\d]/g, "")}`;
-    else if (a.type === "link") { window.location.href = a.href; }
+    // only site pages or http(s) addresses - never javascript:/data: URLs
+    else if (a.type === "link" && /^(\/(?!\/)|https?:\/\/)/i.test(String(a.href || ""))) { window.location.href = a.href; }
   };
 
   const send = async (text) => {

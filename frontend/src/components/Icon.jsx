@@ -228,6 +228,9 @@ const paths = {
   ),
 };
 
+/** Every icon name (used by the Super Admin icon picker). */
+export const ICON_NAMES = Object.keys(paths);
+
 export default function Icon({ name, size = 20, className = "", strokeWidth = 1.7 }) {
   const glyph = paths[name];
   if (!glyph) return null;

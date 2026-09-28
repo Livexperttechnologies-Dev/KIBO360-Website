@@ -1,65 +1,56 @@
-import { useEffect } from "react";
-
-const SITE_URL = "https://kibo360.in";
-const SITE_NAME = "KIBO360";
+import { createContext, useContext, useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
+import { useCms } from "../cms/content.jsx";
+import { pageById } from "../cms/pageMeta.js";
+import { computeSeo, headTags } from "../cms/seo.js";
 
 /**
- * Per-page SEO for the SPA: document title, meta description, canonical URL,
- * Open Graph / Twitter tags and optional JSON-LD structured data.
+ * Collector used during server rendering: the Seo component deposits the
+ * computed head here and the renderer turns it into real <head> tags.
  */
-export default function Seo({ title, description, path = "/", jsonLd = null, noindex = false }) {
-  // During build-time prerendering there is no document to mutate - hand the
-  // values to the prerender script instead, which writes real <head> tags.
-  if (import.meta.env.SSR) {
-    globalThis.__SEO__ = { title, description, path, jsonLd, noindex };
+export const HeadCollectorContext = createContext(null);
+
+const MANAGED = [
+  'meta[name="description"]', 'meta[name="keywords"]', 'meta[name="robots"]', 'link[rel="canonical"]',
+  'meta[property^="og:"]', 'meta[name^="twitter:"]', 'script[type="application/ld+json"]',
+];
+
+function applyHead(seo) {
+  document.title = seo.title;
+  // Remove every tag we manage (including static ones from the HTML shell),
+  // then write the fresh set - no stale or duplicated tags survive navigation.
+  document.head.querySelectorAll(`[data-kibo-head], ${MANAGED.join(", ")}`).forEach((el) => el.remove());
+  for (const t of headTags(seo)) {
+    if (t.tag === "link" && t.attrs.rel === "icon") {
+      const icon = document.head.querySelector('link[rel="icon"]');
+      if (icon) { icon.setAttribute("href", t.attrs.href); continue; }
+    }
+    const el = document.createElement(t.tag);
+    for (const [k, v] of Object.entries(t.attrs)) el.setAttribute(k, v);
+    if (t.text) el.text = t.text;
+    el.setAttribute("data-kibo-head", "1");
+    document.head.appendChild(el);
   }
-  useEffect(() => {
-    const fullTitle = title.includes(SITE_NAME) ? title : `${title} | ${SITE_NAME}`;
-    document.title = fullTitle;
+}
 
-    const setMeta = (attr, key, content) => {
-      let el = document.head.querySelector(`meta[${attr}="${key}"]`);
-      if (!el) {
-        el = document.createElement("meta");
-        el.setAttribute(attr, key);
-        document.head.appendChild(el);
-      }
-      el.setAttribute("content", content);
-    };
-
-    setMeta("name", "description", description);
-    setMeta("property", "og:title", fullTitle);
-    setMeta("property", "og:description", description);
-    setMeta("property", "og:url", SITE_URL + path);
-    setMeta("property", "og:type", "website");
-    setMeta("property", "og:site_name", SITE_NAME);
-    setMeta("name", "twitter:card", "summary_large_image");
-    setMeta("name", "twitter:title", fullTitle);
-    setMeta("name", "twitter:description", description);
-
-    let canonical = document.head.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.setAttribute("rel", "canonical");
-      document.head.appendChild(canonical);
-    }
-    canonical.setAttribute("href", SITE_URL + path);
-
-    // noindex pages (e.g. /thank-you) must not enter search results
-    setMeta("name", "robots", noindex ? "noindex, nofollow" : "index, follow, max-image-preview:large");
-
-    // Page-specific JSON-LD (replaced on every route change)
-    const JSONLD_ID = "page-jsonld";
-    document.getElementById(JSONLD_ID)?.remove();
-    if (jsonLd) {
-      const script = document.createElement("script");
-      script.type = "application/ld+json";
-      script.id = JSONLD_ID;
-      script.text = JSON.stringify(jsonLd);
-      document.head.appendChild(script);
-    }
+/**
+ * Per-page SEO. `page` is a built-in page id ("home", "hms"...) or a page
+ * meta object (custom pages). `jsonLd` is the page's automatic schema.
+ */
+export default function Seo({ page, jsonLd = null }) {
+  const { docs, mode, mediaBase } = useCms();
+  const { pathname } = useLocation();
+  const collector = useContext(HeadCollectorContext);
+  const meta = typeof page === "string" ? pageById(page) : page;
+  const seo = useMemo(() => {
+    if (!meta) return null;
+    const s = computeSeo({ page: meta, docs, path: meta.path || pathname, codeJsonLd: jsonLd, mediaBase });
+    // previews and the editor must never be indexed
+    return mode === "live" ? s : { ...s, robots: "noindex, nofollow" };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, description, path, noindex, JSON.stringify(jsonLd)]);
+  }, [meta, docs, pathname, JSON.stringify(jsonLd), mediaBase, mode]);
+  if (collector && seo) collector.seo = seo;
 
+  useEffect(() => { if (seo) applyHead(seo); }, [seo]);
   return null;
 }

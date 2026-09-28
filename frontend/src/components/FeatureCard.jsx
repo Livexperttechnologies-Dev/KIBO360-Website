@@ -1,15 +1,16 @@
-import Icon from "./Icon.jsx";
+import { T, R, Ico } from "../cms/primitives.jsx";
 
-export default function FeatureCard({ icon, title, text }) {
+/** Icon card. Editable keys (inside its list-item scope): icon, title, text */
+export default function FeatureCard({ icon, title, text, ...rest }) {
   return (
-    <div className="feature-card">
+    <div className="feature-card" {...rest}>
       {icon && (
         <span className="icon-badge" aria-hidden="true">
-          <Icon name={icon} size={24} />
+          <Ico name={icon} size={24} />
         </span>
       )}
-      <h3>{title}</h3>
-      {text && <p>{text}</p>}
+      <T k="title" as="h3">{title}</T>
+      {text && <R k="text">{text}</R>}
     </div>
   );
 }
