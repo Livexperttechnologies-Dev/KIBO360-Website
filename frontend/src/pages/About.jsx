@@ -26,7 +26,6 @@ const certs = [
 export default function About() {
   const company = useCompany();
   return (
-<<<<<<< HEAD
     <PageDoc id="about">
       <Seo page="about" jsonLd={aboutJsonLd} />
       <Sections>
@@ -37,127 +36,6 @@ export default function About() {
               <h1><T k="title">Too Many Tools?</T>{" "}<T k="titleHighlight" className="gradient-text">Run Your Business in One Place.</T></h1>
               <R k="text" className="section-subtitle" style={{ margin: "0 auto 22px" }}>As a business, you shouldn&apos;t have to juggle multiple tools. Kibo360 frees you from all the software mess and brings it all to one place. Manage operations, customer relationships, content, and other specialised processes with one platform.</R>
               <Btn k="cta" className="btn btn-primary btn-lg" action="demo">Build a Better Way to Work</Btn>
-=======
-    <>
-      <Seo
-        title="About KIBO360 | Smart Solutions for Every Industry"
-        description="We don't just build platform we build solutions for businesses actually face. Step inside the KIBO360 story."
-        path="/about"
-        jsonLd={aboutJsonLd}
-      />
-      {/* Fold 1 - hero */}
-      <section className="page-hero">
-        <div className="container">
-          <span className="eyebrow">About Us</span>
-          <h1>
-            Too Many Tools?{" "}
-            <span className="gradient-text">Run Your Business in One Place.</span>
-          </h1>
-          <p className="section-subtitle" style={{ margin: "0 auto 22px" }}>
-            As a business, you shouldn&apos;t have to juggle multiple tools. Kibo360
-            frees you from all the software mess and brings it all to one place.
-            Manage operations, customer relationships, content, and other specialised
-            processes with one platform.
-          </p>
-          <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>
-            Build a Better Way to Work
-          </button>
-        </div>
-      </section>
-
-      {/* Fold 2 - About Kibo360 */}
-      <section>
-        <div className="container" style={{ maxWidth: 860 }}>
-          <h2 style={{ marginBottom: 18 }}>About Kibo360</h2>
-          <p style={{ marginBottom: 18, maxWidth: "none", fontSize: "1.02rem" }}>
-            Kibo360 is a business software platform that brings different business
-            functions together in one place. Manage core business functions and
-            specialised processes with greater efficiency.
-          </p>
-          <p style={{ marginBottom: 18, maxWidth: "none", fontSize: "1.02rem" }}>
-            With solutions like ERP, CRM, HMS, LIS, CMS, and more, you can organise
-            information, serve customers, and handle industry-specific work through
-            one growing platform. Whether you are running a business, managing a
-            team, serving customers, or overseeing specialised operations, Kibo360
-            helps you bring your work together and stay in control.
-          </p>
-          <p style={{ maxWidth: "none", fontSize: "1.02rem" }}>
-            And as your business grows, Kibo360 grows with you, with new solutions
-            and capabilities built around the changing needs of modern businesses.
-          </p>
-        </div>
-      </section>
-
-      {/* Fold 3 - Why We Built Kibo360 (existing pillar cards kept) */}
-      <section className="tight">
-        <div className="container">
-          <SectionHeading
-            title="Why We Built Kibo360"
-            subtitle="Kibo360 is built with a bigger vision than a fixed set of business applications. We are creating a platform that brings together solutions for different industries, business functions, and evolving needs."
-          />
-          <div className="container" style={{ maxWidth: 860, marginBottom: 30 }}>
-            <p style={{ marginBottom: 14, maxWidth: "none", textAlign: "center" }}>
-              Today, Kibo360 supports areas such as HMS, CMS, LIS, ERP, and CRM. Our
-              vision is to grow as businesses grow, with expanding solutions,
-              addressing new challenges, and helping more businesses work efficiently.
-            </p>
-            <p style={{ maxWidth: "none", textAlign: "center" }}>
-              Our focus is to keep expanding what businesses can do with Kibo360,
-              giving them access to more useful technology without having to look for
-              a new solution every time their needs change.
-            </p>
-          </div>
-          <div className="grid grid-3">
-            {valuePillars.map((v) => (
-              <FeatureCard key={v.title} icon={v.icon} title={v.title} text={v.text} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Fold 4 (blank in doc) - strategic pillars kept as-is */}
-      <section>
-        <div className="container">
-          <SectionHeading
-            eyebrow="Our Approach"
-            title="Four strategic pillars. One connected platform."
-          />
-          <div className="grid grid-2">
-            {capabilityMatrix.map((m) => (
-              <article key={m.pillar} className="matrix-card">
-                <h3>{m.pillar}</h3>
-                <p style={{ fontSize: "0.92rem" }}>{m.text}</p>
-                <div className="matrix-caps">
-                  {m.capabilities.map((c) => <span key={c}>{c}</span>)}
-                </div>
-                <p className="matrix-impact"><Icon name="trending-up" size={16} /> {m.impact}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Certifications */}
-      <section className="tight">
-        <div className="container">
-          <SectionHeading
-            eyebrow="Certifications"
-            title="Certified. Compliant. Trusted."
-            subtitle="Our processes and products are independently certified, so you can build on Kibo360 with confidence."
-          />
-          <div className="grid grid-3">
-            <div className="feature-card cert-flag">
-              <span className="icon-badge" aria-hidden="true">
-                <Icon name="award" size={24} />
-              </span>
-              <h3>ISO 9001:2015 Certified</h3>
-              <p>
-                Livexpert Technologies is certified for{" "}
-                <strong>Quality Management Systems</strong> under ISO 9001:2015 -
-                the processes behind building, delivering and supporting Kibo360
-                meet the international quality standard.
-              </p>
->>>>>>> eed07d1007b3de357c1ecbac5b5f619cbd50d634
             </div>
           </section>
         </Sec>
