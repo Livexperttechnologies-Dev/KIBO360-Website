@@ -105,6 +105,7 @@ export function useSite() {
       },
       footer: mergeDefaults(DEFAULT_SITE.footer, s.footer),
       banners: Array.isArray(s.banners) ? s.banners : [],
+      code: Array.isArray(s.code?.snippets) ? s.code.snippets : [],
       settings: mergeDefaults(DEFAULT_SITE.settings, s.settings),
     };
   }, [docs.site]);

@@ -5,7 +5,7 @@ import { BUILTIN_PATHS } from "../../cms/pageMeta.js";
 import { api } from "../api.js";
 import { useAuth } from "../AdminApp.jsx";
 import { Alert, Badge, Button, Check, CopyButton, Empty, Field, I, IconButton, Input, Modal, Select, Spinner, Tabs, fmtDate, timeAgo, useConfirm, useLoad, useToast } from "../ui.jsx";
-import { describeChanges, docType, keyLabel, valueText } from "../docOps.js";
+import { describeChanges, docType, keyLabel, same, valueText } from "../docOps.js";
 
 // ---------------------------------------------------------------------------
 // Editor side panels and dialogs.
@@ -111,6 +111,7 @@ function publishAllowed(docId, store, can) {
     const ch = describeChanges(docId, store.published[docId] || {}, store.working[docId] || {});
     return ch.length > 0 && ch.every((c) => c.kind === "seo") && can("seo.publish");
   }
+  if (t === "site" && !same(store.published.site?.code?.snippets || [], store.working.site?.code?.snippets || []) && !can("site.code")) return false;
   return can({ site: "site.publish", seo: "seo.publish", forms: "forms.publish" }[t]);
 }
 
@@ -323,7 +324,7 @@ export function ChangesList({ ctx, docIds }) {
             <div className="a-row between"><strong>{docLabel(id, store)}</strong><Badge tone={changes.length ? "amber" : "green"}>{changes.length ? `${changes.length} change${changes.length === 1 ? "" : "s"}` : "no changes"}</Badge></div>
             {changes.slice(0, 60).map((c) => (
               <div key={c.key} className="ed-change">
-                <div className="k">{c.kind === "field" ? keyLabel(c.key) : { layout: "Section order / visibility", lists: "Item order / visibility", seo: "SEO settings", meta: "Page name / URL", header: "Header", menus: "Menus", footer: "Footer", banners: "Banners", settings: "Website settings" }[c.kind] || c.kind}</div>
+                <div className="k">{c.kind === "field" ? keyLabel(c.key) : { layout: "Section order / visibility", lists: "Item order / visibility", seo: "SEO settings", meta: "Page name / URL", header: "Header", menus: "Menus", footer: "Footer", banners: "Banners", settings: "Website settings", code: "Header & footer scripts" }[c.kind] || c.kind}</div>
                 {c.kind === "field" && (
                   <>
                     <del>{valueText(c.before)}</del>

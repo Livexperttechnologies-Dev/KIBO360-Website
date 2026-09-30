@@ -288,6 +288,31 @@ function normMenu(items, depth = 0) {
 const socialUrl = (v) => safeUrl(v, { allowRelative: false, allowMailto: false, allowTel: false, allowHash: false }) || "";
 const idLike = (v, re) => (typeof v === "string" && re.test(v.trim()) ? v.trim() : "");
 
+// Custom code snippets (Website -> Header & Footer Scripts). The code itself is
+// deliberately NOT sanitised - it is meant to run - so editing and publishing
+// it needs the separate "site.code" permission (enforced in content.js).
+export const SNIPPET_LOCATIONS = ["head", "bodyStart", "bodyEnd"];
+export function normCode(v) {
+  const list = Array.isArray(v?.snippets) ? v.snippets : [];
+  const seen = new Set();
+  const snippets = list.slice(0, 30).filter(isObj).map((s) => {
+    let id = typeof s.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(s.id) ? s.id : "";
+    while (!id || seen.has(id)) id = `sn_${Math.random().toString(36).slice(2, 10)}`;
+    seen.add(id);
+    return {
+      id,
+      name: cleanText(s.name, 80).trim() || "Custom code",
+      location: SNIPPET_LOCATIONS.includes(s.location) ? s.location : "head",
+      code: cleanText(s.code, 50000),
+      enabled: bool(s.enabled, true),
+      pages: Array.isArray(s.pages) ? [...new Set(s.pages.map((p) => String(p)).filter((p) => p === "*" || p === "/" || SLUG_RE.test(p)))].slice(0, 60) : ["*"],
+      consent: s.consent === "analytics" ? "analytics" : "none",
+      preview: bool(s.preview, false),
+    };
+  });
+  return { snippets };
+}
+
 export function normSite(data) {
   const d = isObj(data) ? data : {};
   const out = {};
@@ -319,6 +344,7 @@ export function normSite(data) {
     };
     const logo = normImage(f.logo); if (logo) out.footer.logo = logo;
   }
+  if (isObj(d.code)) out.code = normCode(d.code);
   if (Array.isArray(d.banners)) {
     out.banners = d.banners.slice(0, 10).filter(isObj).map((b) => {
       const nb = {
@@ -592,7 +618,7 @@ export function normalizeDoc(docId, data, opts = {}) {
 /** Top-level keys that a patch may set, per doc type. */
 export const PATCHABLE = {
   page: ["fields", "lists", "layout", "seo", "meta"],
-  site: ["header", "menus", "footer", "banners", "settings"],
+  site: ["header", "menus", "footer", "banners", "settings", "code"],
   seo: ["global", "robots", "redirects", "sitemap", "llms", "indexNow", "schema"],
   forms: ["forms"],
 };

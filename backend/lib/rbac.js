@@ -23,6 +23,7 @@ export const PERMISSIONS = [
 
   { key: "site.edit", group: "Website", label: "Edit header, footer, menus, banners, settings" },
   { key: "site.publish", group: "Website", label: "Publish header, footer, menus, banners, settings" },
+  { key: "site.code", group: "Website", label: "Header & footer scripts (custom code runs on every page - trusted people only)" },
 
   { key: "forms.edit", group: "Forms & Leads", label: "Edit form drafts" },
   { key: "forms.publish", group: "Forms & Leads", label: "Publish forms" },
@@ -60,7 +61,7 @@ export const BUILTIN_ROLES = [
     name: "Website Admin",
     description: "Runs the whole website: content, media, SEO, navigation, forms and publishing. No team/role management.",
     builtin: true,
-    permissions: PERMISSION_KEYS.filter((k) => !["users.manage", "roles.manage"].includes(k)),
+    permissions: PERMISSION_KEYS.filter((k) => !["users.manage", "roles.manage", "site.code"].includes(k)),
   },
   {
     id: "content_manager",

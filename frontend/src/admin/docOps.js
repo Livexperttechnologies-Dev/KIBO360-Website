@@ -19,7 +19,7 @@ export const same = (a, b) => stable(a ?? null) === stable(b ?? null);
 export const docType = (docId) => (docId.startsWith("page:") ? "page" : docId);
 export const PATCHABLE = {
   page: ["fields", "lists", "layout", "seo", "meta"],
-  site: ["header", "menus", "footer", "banners", "settings"],
+  site: ["header", "menus", "footer", "banners", "settings", "code"],
   seo: ["global", "robots", "redirects", "sitemap", "llms", "indexNow", "schema"],
   forms: ["forms"],
 };

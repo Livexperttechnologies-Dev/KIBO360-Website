@@ -30,7 +30,7 @@ const Account = lazy(() => import("./modules/Account.jsx"));
 const AuthCtx = createContext(null);
 export const useAuth = () => useContext(AuthCtx);
 
-const CONTENT_PERMS = ["pages.view", "seo.view", "site.edit", "forms.edit"];
+const CONTENT_PERMS = ["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"];
 
 export const NAV = [
   { items: [{ to: "/admin", label: "Dashboard", icon: "dashboard", perm: "dashboard.view", end: true }] },

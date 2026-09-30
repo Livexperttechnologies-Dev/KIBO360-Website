@@ -35,9 +35,14 @@ const who = (u) => (u ? { id: u.id, name: u.name, email: u.email } : { id: "syst
 
 /** Public copy of a document: internal notification addresses stay private. */
 export function publicData(docId, data) {
+  if (docId === "site" && Array.isArray(data?.code?.snippets)) {
+    return { ...data, code: { snippets: data.code.snippets.filter((s) => s.enabled !== false) } };
+  }
   if (docId !== "forms" || !Array.isArray(data?.forms)) return data;
   return { ...data, forms: data.forms.map(({ notify, ...f }) => f) };
 }
+/** Did the custom code (header/footer scripts) change between two site versions? */
+export const codeChanged = (a, b) => stable(a?.code?.snippets || []) !== stable(b?.code?.snippets || []);
 
 export function createContent({ store, audit, requireAuth, can, validators = {}, onPublish = () => {}, permissionsOf = null }) {
   // ---------------------------------------------------------------- stores
@@ -92,7 +97,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
   function editPermFor(docId, key) {
     const t = docType(docId);
     if (t === "page") return key === "seo" ? ["seo.edit", "pages.edit"] : ["pages.edit"];
-    if (t === "site") return ["site.edit"];
+    if (t === "site") return key === "code" ? ["site.code"] : ["site.edit"];
     if (t === "seo") return ["seo.edit"];
     if (t === "forms") return ["forms.edit"];
     return ["__none__"];
@@ -111,6 +116,24 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     return [{ site: "site.publish", seo: "seo.publish", forms: "forms.publish" }[t] || "__none__"];
   }
   const hasAny = (req, perms) => perms.some((p) => can(req, p));
+  /** Parts of a doc this user may NOT edit (only the site doc has split permissions). */
+  const lockedKeys = (req, docId) => (docType(docId) === "site" ? PATCHABLE.site.filter((k) => !hasAny(req, editPermFor(docId, k))) : []);
+  const mayEditSome = (req, docId) => (docType(docId) === "site" ? PATCHABLE.site.some((k) => hasAny(req, editPermFor(docId, k))) : hasAny(req, editPermFor(docId, "fields")));
+  /** Copy the parts this user may not edit from `from` onto `into`. */
+  function keepLocked(req, docId, into, from) {
+    for (const k of lockedKeys(req, docId)) { if (from?.[k] === undefined) delete into[k]; else into[k] = structuredClone(from[k]); }
+    return into;
+  }
+  /**
+   * May someone with permission check `has` publish this version? Publishing
+   * changed custom code additionally needs "site.code" - otherwise anyone with
+   * site.publish could push someone else's script live.
+   */
+  function mayPublish(has, docId, draftData, pubData) {
+    if (!publishPermFor(docId, draftData, pubData).some(has)) return false;
+    if (docType(docId) === "site" && codeChanged(draftData, pubData) && !has("site.code")) return false;
+    return true;
+  }
 
   // --------------------------------------------------------------- publish
   function publishDocs(entries, { user, note = "", source = "publish" }) {
@@ -163,7 +186,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         if (permissionsOf && s.createdBy?.id && s.createdBy.id !== "system") {
           const perms = permissionsOf(s.createdBy.id);
           const pubNow = loadPublished();
-          const allowed = perms && s.docIds.every((id) => publishPermFor(id, s.snapshot[id], pubNow.docs[id]?.data).some((p) => perms.has(p)));
+          const allowed = perms && s.docIds.every((id) => mayPublish((p) => perms.has(p), id, s.snapshot[id], pubNow.docs[id]?.data));
           if (!allowed) throw new ValidationError(`${s.createdBy.name || "The scheduler"} no longer has permission to publish this`);
         }
         publishDocs(Object.entries(s.snapshot).map(([docId, data]) => ({ docId, data })), { user: s.createdBy, note: s.note || "Scheduled publish", source: "schedule" });
@@ -238,14 +261,14 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     });
 
     // ---- admin: documents -------------------------------------------------
-    app.get("/api/admin/content/docs", requireAuth(["pages.view", "seo.view", "site.edit", "forms.edit"]), handle((req, res) => {
+    app.get("/api/admin/content/docs", requireAuth(["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"]), handle((req, res) => {
       const pub = loadPublished();
       const ids = new Set([...Object.keys(pub.docs), ...listDraftIds()]);
       res.json({ ok: true, version: pub.version || 0, docs: [...ids].sort().map((id) => docStatus(id, pub)) });
     }));
 
     /** Every working copy at once - what the visual editor renders from. */
-    app.get("/api/admin/content/working", requireAuth(["pages.view", "seo.view", "site.edit", "forms.edit"]), handle((_req, res) => {
+    app.get("/api/admin/content/working", requireAuth(["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"]), handle((_req, res) => {
       const pub = loadPublished();
       const ids = new Set([...Object.keys(pub.docs), ...listDraftIds()]);
       const docs = {};
@@ -254,7 +277,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       res.json({ ok: true, version: pub.version || 0, docs, published });
     }));
 
-    app.get("/api/admin/content/doc/:docId", requireAuth(["pages.view", "seo.view", "site.edit", "forms.edit"]), handle((req, res) => {
+    app.get("/api/admin/content/doc/:docId", requireAuth(["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"]), handle((req, res) => {
       const docId = docParam(req, res); if (!docId) return;
       const pub = loadPublished();
       const d = loadDraft(docId);
@@ -296,6 +319,11 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       }
       if (t === "page" && docId.startsWith("page:c-")) base.meta = { ...(base.meta || {}), template: "custom" };
       const clean = normalizeDoc(docId, base);
+      if (t === "site" && keys.includes("code") && codeChanged(workingData(docId, pub), clean)) {
+        const k = `code:${req.user.id}:${Math.floor(Date.now() / 60_000)}`;
+        if (!editing.auditSeen) editing.auditSeen = new Set();
+        if (!editing.auditSeen.has(k)) { editing.auditSeen.add(k); audit.log(req, { action: "content.scripts_edited", target: "site", details: { snippets: (clean.code?.snippets || []).length } }); }
+      }
       const prev = loadDraft(docId);
       const rec = { data: clean, rev: (prev?.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user) };
       saveDraft(docId, rec);
@@ -316,12 +344,18 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
 
     app.post("/api/admin/content/doc/:docId/discard", requireAuth(), handle((req, res) => {
       const docId = docParam(req, res); if (!docId) return;
-      if (!hasAny(req, editPermFor(docId, "fields"))) return res.status(403).json({ ok: false, error: "No permission" });
+      if (!mayEditSome(req, docId)) return res.status(403).json({ ok: false, error: "No permission" });
       const pub = loadPublished();
       if (docId.startsWith("page:c-") && !pub.docs[docId]) return res.status(400).json({ ok: false, error: "This page has never been published - delete it instead" });
-      deleteDraft(docId);
-      audit.log(req, { action: "content.draft_discarded", target: docId });
-      res.json({ ok: true, status: docStatus(docId) });
+      const draft = loadDraft(docId);
+      const pubData = pub.docs[docId]?.data;
+      const kept = draft ? lockedKeys(req, docId).filter((k) => !same(draft.data?.[k], pubData?.[k])) : [];
+      if (kept.length) {
+        const data = keepLocked(req, docId, structuredClone(pubData || emptyDoc(docId)), draft.data);
+        saveDraft(docId, { data: normalizeDoc(docId, data), rev: (draft.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user) });
+      } else deleteDraft(docId);
+      audit.log(req, { action: "content.draft_discarded", target: docId, details: kept.length ? { kept } : undefined });
+      res.json({ ok: true, kept, status: docStatus(docId) });
     }));
 
     app.post("/api/admin/content/publish", requireAuth(), handle((req, res) => {
@@ -333,8 +367,8 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         const d = loadDraft(docId);
         const data = d?.data || pub.docs[docId]?.data;
         if (!data) return res.status(400).json({ ok: false, error: `${docId} has nothing to publish` });
-        if (!hasAny(req, publishPermFor(docId, data, pub.docs[docId]?.data))) {
-          return res.status(403).json({ ok: false, error: `You don't have permission to publish ${docId}` });
+        if (!mayPublish((p) => can(req, p), docId, data, pub.docs[docId]?.data)) {
+          return res.status(403).json({ ok: false, error: docId === "site" && codeChanged(data, pub.docs[docId]?.data) && !can(req, "site.code") ? "Publishing header/footer script changes needs the scripts permission" : `You don't have permission to publish ${docId}` });
         }
         entries.push({ docId, data });
       }
@@ -358,12 +392,12 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     }));
 
     // ---- revisions ----------------------------------------------------------
-    app.get("/api/admin/content/doc/:docId/revisions", requireAuth(["pages.view", "seo.view", "site.edit", "forms.edit"]), handle((req, res) => {
+    app.get("/api/admin/content/doc/:docId/revisions", requireAuth(["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"]), handle((req, res) => {
       const docId = docParam(req, res); if (!docId) return;
       const list = loadRevisions(docId).map(({ data, ...meta }) => meta).reverse();
       res.json({ ok: true, revisions: list });
     }));
-    app.get("/api/admin/content/doc/:docId/revisions/:rev", requireAuth(["pages.view", "seo.view", "site.edit", "forms.edit"]), handle((req, res) => {
+    app.get("/api/admin/content/doc/:docId/revisions/:rev", requireAuth(["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"]), handle((req, res) => {
       const docId = docParam(req, res); if (!docId) return;
       const r = loadRevisions(docId).find((x) => String(x.rev) === String(req.params.rev));
       if (!r) return res.status(404).json({ ok: false, error: "Revision not found" });
@@ -371,17 +405,18 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     }));
     app.post("/api/admin/content/doc/:docId/restore", requireAuth(), handle((req, res) => {
       const docId = docParam(req, res); if (!docId) return;
-      if (!hasAny(req, editPermFor(docId, "fields"))) return res.status(403).json({ ok: false, error: "No permission" });
+      if (!mayEditSome(req, docId)) return res.status(403).json({ ok: false, error: "No permission" });
       const r = loadRevisions(docId).find((x) => String(x.rev) === String(req.body?.rev));
       if (!r) return res.status(404).json({ ok: false, error: "Revision not found" });
       const prev = loadDraft(docId);
-      saveDraft(docId, { data: normalizeDoc(docId, r.data), rev: (prev?.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user), restoredFrom: r.rev });
+      const restored = keepLocked(req, docId, structuredClone(r.data), workingData(docId, loadPublished()));
+      saveDraft(docId, { data: normalizeDoc(docId, restored), rev: (prev?.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user), restoredFrom: r.rev });
       audit.log(req, { action: "content.restore_to_draft", target: docId, details: { rev: r.rev } });
       res.json({ ok: true, status: docStatus(docId) });
     }));
 
     // ---- schedules ----------------------------------------------------------
-    app.get("/api/admin/content/schedules", requireAuth(["pages.view", "seo.view", "site.edit", "forms.edit"]), (_req, res) => {
+    app.get("/api/admin/content/schedules", requireAuth(["pages.view", "seo.view", "site.edit", "site.code", "forms.edit"]), (_req, res) => {
       res.json({ ok: true, schedules: loadSchedules().map(({ snapshot, ...s }) => s).reverse() });
     });
     app.post("/api/admin/content/schedules", requireAuth(), handle((req, res) => {
@@ -395,7 +430,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       for (const docId of ids) {
         const data = loadDraft(docId)?.data;
         if (!data) return res.status(400).json({ ok: false, error: `${docId} has no draft changes to schedule` });
-        if (!hasAny(req, publishPermFor(docId, data, pub.docs[docId]?.data))) return res.status(403).json({ ok: false, error: `You don't have permission to publish ${docId}` });
+        if (!mayPublish((p) => can(req, p), docId, data, pub.docs[docId]?.data)) return res.status(403).json({ ok: false, error: `You don't have permission to publish ${docId}` });
         snapshot[docId] = normalizeDoc(docId, data, { strict: true });
       }
       const s = { id: newId("s_"), docIds: ids, at: new Date(at).toISOString(), snapshot, note: clampStr(req.body?.note, 200), status: "pending", createdAt: new Date().toISOString(), createdBy: who(req.user) };
@@ -411,7 +446,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       const s = list.find((x) => x.id === req.params.id);
       if (!s || s.status !== "pending") return res.status(404).json({ ok: false, error: "Schedule not found" });
       const pub = loadPublished();
-      if (s.createdBy?.id !== req.user.id && !s.docIds.every((id) => hasAny(req, publishPermFor(id, s.snapshot?.[id], pub.docs[id]?.data)))) {
+      if (s.createdBy?.id !== req.user.id && !s.docIds.every((id) => mayPublish((p) => can(req, p), id, s.snapshot?.[id], pub.docs[id]?.data))) {
         return res.status(403).json({ ok: false, error: "You can only cancel schedules for content you may publish" });
       }
       s.status = "cancelled";
@@ -504,6 +539,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       const json = JSON.stringify(cur);
       if (!needles.some((n) => n && json.includes(n))) continue;
       const next = normalizeDoc(docId, transform(structuredClone(cur)));
+      if (docType(docId) === "site" && cur.code) next.code = cur.code; // custom code is never rewritten automatically
       if (same(next, cur)) continue;
       const prev = loadDraft(docId);
       saveDraft(docId, { data: next, rev: (prev?.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(user) });
