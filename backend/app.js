@@ -17,7 +17,7 @@ import { apiSecurityHeaders } from "./lib/security.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_ORIGINS = [
-  "https://kibo360.in", "https://www.kibo360.in", "https://staging.kibo360.in",
+  "https://kibo360.in", "https://www.kibo360.in",
   "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:4599", "http://localhost:5001",
 ];
 

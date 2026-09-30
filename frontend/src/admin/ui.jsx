@@ -278,6 +278,7 @@ export function FeedbackProvider({ children }) {
       )}
       {dialog && (
         <Modal
+          className="a-dialog"
           title={dialog.title || (dialog.kind === "prompt" ? "Enter a value" : "Are you sure?")}
           onClose={() => close(dialog.kind === "prompt" ? null : false)}
           width={460}

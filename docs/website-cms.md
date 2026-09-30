@@ -68,8 +68,12 @@ Image optimisation (WebP + responsive sizes, EXIF/GPS removal) uses `sharp`
    keep it private). Existing leads/submissions are migrated automatically on first
    start; a backup is written to `submissions.legacy-backup.json`.
 2. `cd backend && npm install && npm test` (all tests must pass).
-3. Build and start staging (either mode above) on e.g. `staging.kibo360.in`, add
-   it to `ALLOWED_ORIGINS` if the API runs on another host.
+3. Build and start staging on e.g. `staging.kibo360.in`, preferably with the Node
+   site server (`SITE_DIST`), so the site and its API share one origin. Only
+   `kibo360.in` / `www.kibo360.in` talk to the production API; every other host uses
+   its own origin, so staging can never sign in to or publish on the live site. To
+   point a static build at a different API, build with `VITE_API_BASE=https://…` and
+   add the site's origin to that API's `ALLOWED_ORIGINS`.
 4. Sign in at `/admin` with the super admin account. Accounts with the old password
    format are upgraded to scrypt automatically at their next sign-in. New team
    members must set their own password at first sign-in. Sessions stay alive
@@ -78,6 +82,40 @@ Image optimisation (WebP + responsive sizes, EXIF/GPS removal) uses `sharp`
 5. Walk through: edit a page → Preview link → Publish → check the live page; SEO →
    Health check; upload an image; submit the demo form and find it under Leads.
 6. When staging looks right, deploy the same build to production.
+
+## Locked out of the admin?
+
+Run these on the server, in the `backend/` folder (with the same `DATA_DIR` the
+server uses, if it sets one):
+
+```bash
+npm run admin -- status
+npm run admin -- reset-password
+```
+
+`status` shows which data folder is used, the accounts in it and their state
+(never password hashes), plus lead/submission counts, so you can tell whether
+the old data came along with the deploy. `reset-password` sets a new
+**temporary** password for the Super Admin (prints it once), re-activates the
+account and signs out its old sessions; you choose your own password at the next
+sign-in. Reset someone else with `npm run admin -- reset-password name@example.com`.
+
+No shell on the host? Set `KIBO_ADMIN_RESET_PASSWORD=<temporary password>` and
+restart once. It is applied a single time per value (restarts don't keep
+resetting it). Remove the variable after signing in.
+
+Other causes of "Invalid email or password":
+- **The deploy started with an empty data folder.** The server then creates the
+  Super Admin with a random temporary password, printed once in the server log
+  (`[auth] Temporary password: …`). If so, your old leads and settings are still in
+  the previous data folder: stop the server and copy that folder back.
+- **Too many failed attempts.** After 8 failures in 10 minutes from one network (or
+  5 for the same email from one network) that network pauses; the message says for
+  how long. Other networks are not affected, and failures from strangers only slow
+  sign-in down, never lock the right password out. Restarting the server clears it.
+- **A "Session expired" box right after signing in** was a bug in the first CMS
+  release (an old sign-in left in the browser); fixed. If you see it, enter the
+  password you are using now.
 
 ## Permissions
 

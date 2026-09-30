@@ -1,8 +1,8 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { api, getToken, setToken, onSessionExpired } from "./api.js";
-import { Button, Field, FeedbackProvider, I, Input, Spinner, useToast, Alert } from "./ui.jsx";
-import { ContentStoreProvider } from "./store.jsx";
+import { api, getToken, setToken, onSessionExpired, onPasswordChangeRequired } from "./api.js";
+import { Button, Field, FeedbackProvider, I, Input, Spinner, useToast, useConfirm, Alert } from "./ui.jsx";
+import { ContentStoreProvider, hasUnsavedChanges } from "./store.jsx";
 import "./admin.css";
 
 // ---------------------------------------------------------------------------
@@ -93,6 +93,13 @@ function AuthGate() {
   const [expired, setExpired] = useState(false);
   const [checking, setChecking] = useState(!!getToken());
   const toast = useToast();
+  const confirm = useConfirm();
+  const meRef = useRef(null);
+  meRef.current = me;
+  // Once the app is open, a required password change is shown ON TOP of it
+  // (unsaved drafts stay in memory) instead of replacing it.
+  const started = useRef(false);
+  if (me && !me.mustChangePassword) started.current = true;
 
   const refreshMe = useCallback(async () => {
     const d = await api("/api/admin/me");
@@ -102,12 +109,21 @@ function AuthGate() {
 
   useEffect(() => {
     if (!getToken()) return;
-    refreshMe().catch(() => setToken("")).finally(() => setChecking(false));
+    refreshMe()
+      .catch((e) => { if (e.status === 401 || e.status === 403) setToken(""); else toast("Can't reach the server right now - sign in again when it's back.", { tone: "error" }); })
+      .finally(() => setChecking(false));
   }, [refreshMe]);
 
   // An expired session must not throw away unsaved drafts: keep everything
-  // mounted and ask for the password again on top.
-  useEffect(() => onSessionExpired(() => setExpired(true)), []);
+  // mounted and ask for the password again on top. Only while signed in -
+  // a stale token found at start-up (e.g. from the old admin, which used the
+  // same storage key) just shows the normal sign-in page.
+  useEffect(() => onSessionExpired(() => {
+    if (!meRef.current) return;
+    if (started.current) setExpired(true); // app open: ask again on top, drafts kept
+    else { setMe(null); toast("Your session ended - please sign in again.", { tone: "error" }); } // nothing to keep yet
+  }), [toast]);
+  useEffect(() => onPasswordChangeRequired(() => { if (meRef.current && !meRef.current.mustChangePassword) setMe((m) => (m ? { ...m, mustChangePassword: true } : m)); }), []);
 
   const auth = useMemo(() => {
     if (!me) return null;
@@ -119,14 +135,25 @@ function AuthGate() {
         try { await api("/api/admin/logout", { method: "POST" }); } catch { /* already gone */ }
         setToken("");
         setExpired(false);
+        started.current = false;
         setMe(null);
       },
     };
   }, [me, refreshMe]);
 
+  /** Signing out from a password box must not silently drop unsaved edits. */
+  const leave = async () => {
+    if (hasUnsavedChanges()) {
+      const ok = await confirm({ title: "Sign out and lose unsaved changes?", message: "Some edits have not been saved yet. If you sign out now they are thrown away. Sign in again instead to keep them.", confirmLabel: "Sign out anyway", danger: true });
+      if (!ok) return;
+    }
+    if (expired) { setToken(""); setExpired(false); started.current = false; setMe(null); return; }
+    auth.signOut();
+  };
+
   if (checking) return <div className="a-boot"><Spinner label="Opening Super Admin…" /></div>;
-  if (!auth) return <Login onSignedIn={(t, u) => { setToken(t); setMe(u); }} />;
-  if (me.mustChangePassword) return <AuthCtx.Provider value={auth}><ForcePassword /></AuthCtx.Provider>;
+  if (!auth) return <Login onSignedIn={(t, u) => { setToken(t); setExpired(false); setMe(u); }} />;
+  if (me.mustChangePassword && !started.current) return <AuthCtx.Provider value={auth}><ForcePassword /></AuthCtx.Provider>;
 
   const contentEnabled = auth.can(CONTENT_PERMS);
   return (
@@ -135,9 +162,25 @@ function AuthGate() {
       {expired && (
         <ReLogin
           email={me.email}
-          onDone={(t) => { setToken(t); setExpired(false); toast("Signed in again - saving your changes"); window.dispatchEvent(new Event("kibo-relogin")); }}
-          onCancel={() => { setToken(""); setExpired(false); setMe(null); }}
+          onDone={(t, u) => {
+            setToken(t);
+            setExpired(false);
+            setMe(u); // fresh permissions + "must choose a new password"
+            if (!u.mustChangePassword) { toast("Signed in again - saving your changes"); window.dispatchEvent(new Event("kibo-relogin")); }
+          }}
+          onCancel={leave}
         />
+      )}
+      {!expired && me.mustChangePassword && (
+        <div className="a-modal-back a-auth-layer">
+          <div className="a-modal" style={{ maxWidth: 440 }}>
+            <ChangePasswordForm
+              compact
+              onDone={(u) => { setMe(u); toast("New password saved - saving your changes"); window.dispatchEvent(new Event("kibo-relogin")); }}
+              onSignOut={leave}
+            />
+          </div>
+        </div>
       )}
     </AuthCtx.Provider>
   );
@@ -152,15 +195,15 @@ function ReLogin({ email, onDone, onCancel }) {
     setBusy(true); setError("");
     try {
       const d = await api("/api/admin/login", { method: "POST", body: { email, password } });
-      onDone(d.token);
+      onDone(d.token, d.user);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   return (
-    <div className="a-modal-back">
+    <div className="a-modal-back a-auth-layer">
       <form className="a-modal" style={{ maxWidth: 420 }} onSubmit={submit}>
         <header className="a-modal-head"><h2>Session expired</h2></header>
         <div className="a-modal-body">
-          <p className="a-muted">For security you were signed out. Enter your password to continue - your unsaved changes are kept and saved as soon as you are back.</p>
+          <p className="a-muted">For security you were signed out. Enter your password to continue - your unsaved changes are kept and saved as soon as you are back. If your password was just reset, use the new temporary password.</p>
           <Field label="Email"><Input value={email} disabled /></Field>
           <Field label="Password"><Input type="password" value={password} onChange={setPassword} autoComplete="current-password" autoFocus required /></Field>
           {error && <Alert tone="error">{error}</Alert>}
@@ -203,7 +246,20 @@ function Login({ onSignedIn }) {
 }
 
 function ForcePassword() {
-  const { me, refreshMe, signOut } = useAuth();
+  const { refreshMe, signOut } = useAuth();
+  return (
+    <div className="a-login">
+      <div className="a-login-card">
+        <img src="/kibo360-logo.png" alt="KIBO360" height="46" />
+        <ChangePasswordForm onDone={() => refreshMe()} onSignOut={signOut} />
+      </div>
+    </div>
+  );
+}
+
+/** "Choose your own password" - after a temporary / reset / default password. */
+function ChangePasswordForm({ onDone, onSignOut, compact = false }) {
+  const { me } = useAuth();
   const [cur, setCur] = useState("");
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
@@ -214,24 +270,26 @@ function ForcePassword() {
     if (next !== again) { setError("The new passwords don't match"); return; }
     setBusy(true); setError("");
     try {
-      await api("/api/admin/password", { method: "POST", body: { current: cur, next } });
-      await refreshMe();
+      const d = await api("/api/admin/password", { method: "POST", body: { current: cur, next } });
+      await onDone(d.user);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   return (
-    <div className="a-login">
-      <form className="a-login-card" onSubmit={submit}>
-        <img src="/kibo360-logo.png" alt="KIBO360" height="46" />
-        <h1>Choose a new password</h1>
-        <p className="a-muted">Hi {me.name} - for security, set your own password before continuing. Use at least 10 characters with letters and numbers.</p>
-        <Field label="Current (temporary) password"><Input type="password" value={cur} onChange={setCur} autoComplete="current-password" required /></Field>
+    <form className={compact ? "" : "a-stack"} onSubmit={submit}>
+      {compact ? <header className="a-modal-head"><h2>Choose a new password</h2></header> : <h1>Choose a new password</h1>}
+      <div className={compact ? "a-modal-body" : "a-stack"}>
+        <p className="a-muted">Hi {me.name} - for security, set your own password before continuing. At least 10 characters, with letters and numbers.</p>
+        <Field label="Current password (the temporary one you just used)"><Input type="password" value={cur} onChange={setCur} autoComplete="current-password" required /></Field>
         <Field label="New password"><Input type="password" value={next} onChange={setNext} autoComplete="new-password" required /></Field>
         <Field label="Repeat new password"><Input type="password" value={again} onChange={setAgain} autoComplete="new-password" required /></Field>
         {error && <Alert tone="error">{error}</Alert>}
-        <Button variant="primary" type="submit" busy={busy} className="a-block">Save password</Button>
-        <Button variant="ghost" onClick={signOut} className="a-block">Sign out</Button>
-      </form>
-    </div>
+      </div>
+      <div className={compact ? "a-modal-foot" : "a-stack"}>
+        {compact ? <Button onClick={onSignOut}>Sign out</Button> : null}
+        <Button variant="primary" type="submit" busy={busy} className={compact ? "" : "a-block"}>Save password</Button>
+        {!compact && <Button variant="ghost" onClick={onSignOut} className="a-block">Sign out</Button>}
+      </div>
+    </form>
   );
 }
 

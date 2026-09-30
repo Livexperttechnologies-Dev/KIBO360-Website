@@ -432,3 +432,9 @@ textarea.a-code:focus { outline: 2px solid var(--a-brand); }
 .a-json { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #faf9fd; border: 1px solid var(--a-line); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
 .a-perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
 .a-field-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 120px auto; gap: 8px; align-items: center; }
+
+/* ------------------------------------------------------------ sign-in layer */
+.a-modal-back.a-auth-layer { z-index: 1800; }
+.a-modal-back:has(> .a-dialog) { z-index: 1900; }
+.a-modal > form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.a-modal > form > .a-modal-body { overflow-y: auto; min-height: 0; }

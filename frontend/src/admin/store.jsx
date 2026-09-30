@@ -14,6 +14,9 @@ import { applyPatch, diffPatch, docType, emptyPage, same } from "./docOps.js";
 // ---------------------------------------------------------------------------
 
 const Ctx = createContext(null);
+const unsavedProbe = { current: () => false };
+/** True while edits haven't reached the server (used before signing out). */
+export const hasUnsavedChanges = () => unsavedProbe.current();
 export const useContent = () => useContext(Ctx);
 
 export const emptyFor = (docId) => (docType(docId) === "page" ? emptyPage() : {});
@@ -107,8 +110,8 @@ export function ContentStoreProvider({ children }) {
         return true;
       } catch (e) {
         setSave({ state: "error", error: e, at: null, docId });
-        if (e.status === 0) {
-          // offline / server restarting: retry with backoff
+        if (e.status === 0 || e.status >= 500) {
+          // offline / server restarting (a proxy answers 502/503): retry with backoff
           const n = (retry.current.get(docId) || 0) + 1;
           retry.current.set(docId, n);
           timers.current.set(docId, setTimeout(() => saveDoc(docId), Math.min(30000, 2000 * 2 ** n)));
@@ -279,6 +282,8 @@ export function ContentStoreProvider({ children }) {
     await reloadDoc(docId);
     await refreshStatus();
   }, [flush, reloadDoc, refreshStatus]);
+
+  useEffect(() => { unsavedProbe.current = hasPending; return () => { unsavedProbe.current = () => false; }; }, [hasPending]);
 
   // After signing in again (expired session), push everything still unsaved.
   useEffect(() => {

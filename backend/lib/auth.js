@@ -1,3 +1,4 @@
+import net from "net";
 import { hashPassword, verifyPassword, passwordProblem, randomToken, sha256, newId, clampStr } from "./security.js";
 import { BUILTIN_ROLES, LEGACY_MAP, PERMISSIONS, PERMISSION_KEYS, cleanPermissionList, effectivePermissions } from "./rbac.js";
 
@@ -5,10 +6,40 @@ export const SUPER_ADMIN_EMAIL = "livexperttechnologies@gmail.com";
 const USERS = "users.json";
 const ROLES = "roles.json";
 const SESSIONS = "sessions.json";
+const RESET_MARKER = "admin-reset.json";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_CHANGE_PATHS = new Set(["/api/admin/me", "/api/admin/password", "/api/admin/logout"]);
+// The old server shipped this default in its public source - an upgraded
+// account still using it must choose a new password.
+const OLD_DEFAULT_PASSWORD = "Kibo360@Admin";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fmtWait = (ms) => { const m = Math.ceil(ms / 60_000); return m <= 1 ? "a minute" : `${m} minutes`; };
+
+/**
+ * A password taken from an environment variable. Values that would silently
+ * become something other than what the operator typed (surrounding spaces,
+ * a Windows line ending, quotes kept by an env file) are refused loudly.
+ */
+export function envPassword(name, env = process.env) {
+  const raw = env[name];
+  if (raw == null || raw === "") return null;
+  let problem = null;
+  if (raw !== raw.trim()) problem = "it starts or ends with a space or line break";
+  else if (/^(["']).*\1$/.test(raw)) problem = "it is wrapped in quotes - remove them";
+  else if (/[\x00-\x1F\x7F]/.test(raw)) problem = "it contains control characters";
+  else if (raw === OLD_DEFAULT_PASSWORD) problem = "that password is publicly known - choose another";
+  else problem = passwordProblem(raw);
+  if (problem) { console.error(`[auth] ${name} ignored (${raw.length} characters): ${problem}`); return null; }
+  return raw;
+}
 
 export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 }) {
+  const ENV_INITIAL = envPassword("KIBO_ADMIN_PASSWORD");
+  const ENV_RESET = envPassword("KIBO_ADMIN_RESET_PASSWORD");
+  // Records that a given KIBO_ADMIN_RESET_PASSWORD value was applied - a
+  // salted slow hash on the user record (never a fast, guessable digest).
+  const resetApplied = (u) => !!(ENV_RESET && u?.resetHash && verifyPassword(ENV_RESET, u.resetHash).ok);
+  const hadUsers = (() => { try { const u = store.readJson(USERS, null); return Array.isArray(u) && u.length > 0; } catch { return true; } })();
   // ------------------------------------------------------------------ roles
   function loadRoles() {
     let roles = store.readJson(ROLES, null);
@@ -34,7 +65,7 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
     if (!Array.isArray(users) || users.length === 0) {
       // Fresh install: the first password comes from KIBO_ADMIN_PASSWORD, or is
       // generated and printed ONCE to the server log (never a known default).
-      const initial = process.env.KIBO_ADMIN_PASSWORD || randomToken(9).replace(/[^A-Za-z0-9]/g, "").slice(0, 12) + "a7";
+      const initial = ENV_INITIAL || ENV_RESET || randomToken(9).replace(/[^A-Za-z0-9]/g, "").slice(0, 12) + "a7";
       users = [{
         id: newId("u_"),
         email: SUPER_ADMIN_EMAIL,
@@ -44,12 +75,14 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
         extraPermissions: [],
         active: true,
         mustChangePassword: true,
+        sessionEpoch: 0,
+        ...(!ENV_INITIAL && ENV_RESET ? { resetHash: hashPassword(ENV_RESET) } : {}),
         createdAt: new Date().toISOString(),
       }];
       store.writeJson(USERS, users, { backup: true });
-      console.log(process.env.KIBO_ADMIN_PASSWORD
-        ? `[auth] Created super admin ${SUPER_ADMIN_EMAIL} with the password from KIBO_ADMIN_PASSWORD (must be changed at first sign-in)`
-        : `[auth] Created super admin ${SUPER_ADMIN_EMAIL} - temporary password: ${initial} (shown once; must be changed at first sign-in)`);
+      console.log(ENV_INITIAL || ENV_RESET
+        ? `[auth] Created super admin ${SUPER_ADMIN_EMAIL} with the password from the environment (must be changed at first sign-in)`
+        : `\n[auth] ================================================================\n[auth] Created super admin ${SUPER_ADMIN_EMAIL}\n[auth] Temporary password: ${initial}\n[auth] (shown once - must be changed at first sign-in; lost it? run "npm run admin -- reset-password")\n[auth] ================================================================\n`);
       return users;
     }
     // One-time migration from the legacy {role, permissions:{leads:true...}} shape.
@@ -72,6 +105,21 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
     return users;
   }
   const saveUsers = (users) => store.writeJson(USERS, users, { backup: true });
+  /**
+   * Read -> change one user -> write, synchronously and with nothing slow in
+   * between, so a concurrent writer (another request, the recovery CLI) is
+   * never overwritten with a stale copy. Hash passwords BEFORE calling this.
+   */
+  function updateUser(id, fn) {
+    const users = loadUsers();
+    const u = users.find((x) => x.id === id);
+    if (!u) return null;
+    fn(u, users);
+    saveUsers(users);
+    return u;
+  }
+  let dummyHash = null; // equalises timing for unknown emails
+  const dummyCheck = (pw) => { dummyHash ||= hashPassword(randomToken(8)); verifyPassword(pw, dummyHash); };
 
   const publicUser = (u, roles = loadRoles()) => {
     const role = roles.find((r) => r.id === u.roleId);
@@ -100,6 +148,7 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
     const token = randomToken(32);
     sessions.set(sha256(token), {
       userId: user.id,
+      epoch: user.sessionEpoch || 0,
       exp: Date.now() + sessionTtlMs,
       createdAt: new Date().toISOString(),
       ip: req.ip || null,
@@ -124,6 +173,10 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
     if (sess.exp < now) { sessions.delete(hash); return null; }
     const user = loadUsers().find((u) => u.id === sess.userId);
     if (!user || user.active === false) return null;
+    // A reset from the server console / environment bumps sessionEpoch and
+    // so signs out older sessions - no clocks involved, no restart needed
+    // (users.json is read per request).
+    if ((sess.epoch || 0) !== (user.sessionEpoch || 0)) { sessions.delete(hash); return null; }
     // Sliding expiry: an active editor isn't signed out mid-work (idle
     // timeout = the TTL), but no session lives longer than 7 days.
     if (sess.exp - now < sessionTtlMs / 2) {
@@ -157,13 +210,20 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
   const can = (req, perm) => !!req.perms?.has(perm);
 
   // ------------------------------------------------------------ throttling
+  // Hard limits only per network (IP) and per email+network. Guessing one
+  // account from many networks is slowed down (attempts queue up), never
+  // locked: a hard per-email lock would let anyone keep the owner out.
   const failures = new Map(); // key -> { count, reset }
-  const tooMany = (key, max, windowMs) => {
-    const now = Date.now();
-    const rec = failures.get(key);
-    if (!rec || now > rec.reset) return false;
-    return rec.count >= max;
+  const gates = new Map();    // email -> time the next attempt may run
+  const pending = new Map();  // key -> attempts still being processed (queued)
+  const current = (key) => { const r = failures.get(key); return r && Date.now() <= r.reset ? r : null; };
+  /** ms until `key` may try again (failures + attempts still in flight count). */
+  const retryAfter = (key, max) => {
+    const r = current(key);
+    if ((r?.count || 0) + (pending.get(key) || 0) < max) return 0;
+    return r ? r.reset - Date.now() : 30_000;
   };
+  const hold = (keys, delta) => { for (const k of keys) { const n = (pending.get(k) || 0) + delta; if (n > 0) pending.set(k, n); else pending.delete(k); } };
   const fail = (key, windowMs) => {
     const now = Date.now();
     let rec = failures.get(key);
@@ -175,31 +235,129 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
       for (const k of failures.keys()) { if (failures.size <= 15000) break; failures.delete(k); }
     }
   };
+  /**
+   * Place in the per-email queue. Returns the wait and a commit() that takes
+   * the slot - called only when the attempt is accepted, so refused attempts
+   * never push the queue further out. Spacing tops out at 8s, so one network
+   * (max 5 attempts per email) can't fill the 45s queue on its own.
+   */
+  const planQueue = (email) => {
+    const fails = current(`em:${email}`)?.count || 0;
+    if (fails <= 10) { gates.delete(email); return { wait: 0, commit: () => {} }; }
+    const now = Date.now();
+    const start = Math.max(now, gates.get(email) || 0);
+    return {
+      wait: start - now,
+      commit: () => {
+        gates.set(email, start + Math.min(8000, (fails - 10) * 500));
+        if (gates.size > 5000) for (const [k, v] of gates) if (v < now) gates.delete(k);
+      },
+    };
+  };
+  /** Client network: an IPv6 address counts as its /64 (one household or server). */
+  function netOf(ip) {
+    const a = String(ip || "unknown").replace(/^::ffff:(?=\d+\.)/i, "");
+    if (!net.isIPv6(a)) return a;
+    const [head, tail = ""] = a.split("::");
+    const h = head ? head.split(":") : [];
+    const t = tail ? tail.split(":") : [];
+    const full = [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
+    return `${full.slice(0, 4).map((x) => x.toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
+  }
+
+  // ------------------------------------------------- recovery via env var
+  // KIBO_ADMIN_RESET_PASSWORD=... on the next start sets that as the Super
+  // Admin's TEMPORARY password (must be changed at sign-in). Applied once per
+  // value: the fingerprint is kept both in admin-reset.json and on the user
+  // record, so a restart (or a lost marker file) does not reset it again.
+  (function startupAccountChecks() {
+    if (process.env.KIBO_ADMIN_PASSWORD && hadUsers) {
+      console.log("[auth] KIBO_ADMIN_PASSWORD only applies to a brand-new data folder - to reset a password run: npm run admin -- reset-password");
+    }
+    // older builds kept a fast digest here - drop it
+    try { store.remove(RESET_MARKER); } catch { /* not there */ }
+    if (!ENV_RESET) return;
+    const users = loadUsers();
+    let su = users.find((u) => u.roleId === "superadmin") || users.find((u) => String(u.email || "").toLowerCase() === SUPER_ADMIN_EMAIL);
+    if (resetApplied(su)) {
+      console.warn("[auth] KIBO_ADMIN_RESET_PASSWORD is still set (already applied). Remove it from the server environment now.");
+      return;
+    }
+    const hash = hashPassword(ENV_RESET);
+    if (!su) {
+      su = { id: newId("u_"), email: SUPER_ADMIN_EMAIL, name: "Super Admin", roleId: "superadmin", extraPermissions: [], createdAt: new Date().toISOString() };
+      users.push(su);
+    }
+    su.roleId = "superadmin";
+    su.passwordHash = hash;
+    su.mustChangePassword = true;
+    su.active = true;
+    su.sessionEpoch = (su.sessionEpoch || 0) + 1;
+    su.resetHash = hashPassword(ENV_RESET);
+    delete su.resetFingerprint;
+    su.passwordChangedAt = new Date().toISOString();
+    delete su.sessionsNotBefore;
+    saveUsers(users);
+    audit.log(null, { action: "auth.password_reset_env", target: su.email, actor: { name: "Server environment" } });
+    console.warn(`[auth] Super Admin password for ${su.email} was reset from KIBO_ADMIN_RESET_PASSWORD - sign in, choose a new password, then REMOVE the variable.`);
+  })();
 
   // ----------------------------------------------------------------- routes
   function registerRoutes(app) {
-    app.post("/api/admin/login", (req, res) => {
-      const ip = req.ip || "unknown";
-      const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 200);
-      if (tooMany(`ip:${ip}`, 8, 10 * 60_000) || tooMany(`em:${email}`, 20, 60 * 60_000)) {
-        return res.status(429).json({ ok: false, error: "Too many attempts. Try again in a few minutes." });
-      }
-      const users = loadUsers();
-      const user = users.find((u) => u.email.toLowerCase() === email);
-      const check = user ? verifyPassword(String(req.body?.password || ""), user.passwordHash) : { ok: false };
-      if (!user || !check.ok || user.active === false) {
-        fail(`ip:${ip}`, 10 * 60_000);
-        if (email) fail(`em:${email}`, 60 * 60_000);
-        audit.log(req, { action: "auth.login_failed", target: email || "(blank)", actor: { email } });
-        return res.status(401).json({ ok: false, error: "Invalid email or password" });
-      }
-      failures.delete(`ip:${ip}`);
-      if (check.needsRehash) user.passwordHash = hashPassword(String(req.body.password));
-      user.lastLoginAt = new Date().toISOString();
-      saveUsers(users);
-      const token = createSession(user, req);
-      audit.log(req, { action: "auth.login", target: user.email, actor: user });
-      res.json({ ok: true, token, user: publicUser(user) });
+    app.post("/api/admin/login", async (req, res, next) => {
+      try {
+        const ip = req.ip || "unknown";
+        const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 200);
+        const password = typeof req.body?.password === "string" ? req.body.password : "";
+        if (!email || !password) return res.status(400).json({ ok: false, error: "Enter your email and password" });
+        const network = netOf(ip);
+        const ipKey = `ip:${network}`;
+        const pairKey = `pair:${email}|${network}`;
+        const emKey = `em:${email}`;
+        const blocked = Math.max(retryAfter(ipKey, 8), retryAfter(pairKey, 5));
+        if (blocked) {
+          res.setHeader("Retry-After", String(Math.ceil(blocked / 1000)));
+          return res.status(429).json({ ok: false, error: `Too many failed attempts from this network. Try again in ${fmtWait(blocked)} (or restart the server).` });
+        }
+        const slot = planQueue(email);
+        if (slot.wait > 45_000) {
+          res.setHeader("Retry-After", String(Math.ceil(slot.wait / 1000)));
+          return res.status(429).json({ ok: false, error: "This account is receiving many sign-in attempts right now. Try again in a minute (or restart the server)." });
+        }
+        slot.commit();
+        // queued attempts count against the network limits while they wait
+        hold([ipKey, pairKey], 1);
+        let user, check;
+        try {
+          if (slot.wait) await sleep(slot.wait);
+          user = loadUsers().find((u) => String(u.email || "").toLowerCase() === email);
+          check = user ? verifyPassword(password, user.passwordHash) : (dummyCheck(password), { ok: false });
+          // old-format hashes verify fast - add the scrypt cost so timing doesn't tell
+          if (user && !String(user.passwordHash || "").startsWith("scrypt$")) dummyCheck(password);
+        } finally {
+          hold([ipKey, pairKey], -1);
+        }
+        if (!user || !check.ok || user.active === false) {
+          fail(ipKey, 10 * 60_000);
+          fail(pairKey, 15 * 60_000);
+          fail(emKey, 60 * 60_000);
+          audit.log(req, { action: "auth.login_failed", target: email, actor: { email } });
+          return res.status(401).json({ ok: false, error: "Invalid email or password" });
+        }
+        failures.delete(ipKey);
+        failures.delete(pairKey);
+        failures.delete(emKey);
+        gates.delete(email);
+        const newHash = check.needsRehash ? hashPassword(password) : null;
+        const saved = updateUser(user.id, (u) => {
+          if (newHash && u.passwordHash === user.passwordHash) u.passwordHash = newHash;
+          if (password === OLD_DEFAULT_PASSWORD) u.mustChangePassword = true; // published in the old source
+          u.lastLoginAt = new Date().toISOString();
+        }) || user;
+        const token = createSession(saved, req);
+        audit.log(req, { action: "auth.login", target: saved.email, actor: saved });
+        res.json({ ok: true, token, user: publicUser(saved) });
+      } catch (e) { next(e); }
     });
 
     app.post("/api/admin/logout", requireAuth(), (req, res) => {
@@ -217,18 +375,21 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
       const { current, next } = req.body || {};
       const problem = passwordProblem(next);
       if (problem) return res.status(400).json({ ok: false, error: problem });
-      const users = loadUsers();
-      const me = users.find((u) => u.id === req.user.id);
-      if (!verifyPassword(String(current || ""), me.passwordHash).ok) {
+      if (next === OLD_DEFAULT_PASSWORD) return res.status(400).json({ ok: false, error: "That password is publicly known - choose a different one" });
+      if (String(next) === String(current || "")) return res.status(400).json({ ok: false, error: "Choose a new password that is different from the current one" });
+      const me = loadUsers().find((u) => u.id === req.user.id);
+      if (!me || !verifyPassword(String(current || ""), me.passwordHash).ok) {
         return res.status(400).json({ ok: false, error: "Current password is incorrect" });
       }
-      me.passwordHash = hashPassword(String(next));
-      me.mustChangePassword = false;
-      me.passwordChangedAt = new Date().toISOString();
-      saveUsers(users);
+      const newHash = hashPassword(String(next));
+      const saved = updateUser(me.id, (u) => {
+        u.passwordHash = newHash;
+        u.mustChangePassword = false;
+        u.passwordChangedAt = new Date().toISOString();
+      });
       revokeUserSessions(me.id, req.sessionHash); // sign out other devices
       audit.log(req, { action: "auth.password_changed", target: me.email });
-      res.json({ ok: true });
+      res.json({ ok: true, user: publicUser(saved || me) });
     });
 
     // ------------------------------------------------------ team (users)
@@ -256,13 +417,14 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
       if (!within(req, rolePerms(roles, roleId)) || !within(req, cleanPermissionList(b.extraPermissions))) {
         return res.status(403).json({ ok: false, error: "You can't give someone permissions you don't have yourself" });
       }
+      const passwordHash = hashPassword(String(b.password)); // before the read-modify-write
       const users = loadUsers();
-      if (users.some((u) => u.email.toLowerCase() === email)) return res.status(400).json({ ok: false, error: "A user with this email already exists" });
+      if (users.some((u) => String(u.email || "").toLowerCase() === email)) return res.status(400).json({ ok: false, error: "A user with this email already exists" });
       const user = {
         id: newId("u_"),
         email,
         name: clampStr(b.name, 120).trim() || email.split("@")[0],
-        passwordHash: hashPassword(String(b.password)),
+        passwordHash,
         roleId,
         extraPermissions: req.perms.has("roles.manage") ? cleanPermissionList(b.extraPermissions) : [],
         active: true,
@@ -276,6 +438,11 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
     });
 
     app.patch("/api/admin/users/:id", requireAuth("users.manage"), (req, res) => {
+      if (req.body?.password) {
+        const problem = passwordProblem(req.body.password);
+        if (problem) return res.status(400).json({ ok: false, error: problem });
+      }
+      const newHash = req.body?.password ? hashPassword(String(req.body.password)) : null; // before the read-modify-write
       const users = loadUsers();
       const user = users.find((u) => u.id === req.params.id);
       if (!user) return res.status(404).json({ ok: false, error: "User not found" });
@@ -313,10 +480,11 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
         user.active = !!b.active; changes.active = user.active;
         if (!user.active) revokeUserSessions(user.id);
       }
+      if (b.password && user.id === req.user.id) {
+        return res.status(400).json({ ok: false, error: "Change your own password under My Account" });
+      }
       if (b.password) {
-        const problem = passwordProblem(b.password);
-        if (problem) return res.status(400).json({ ok: false, error: problem });
-        user.passwordHash = hashPassword(String(b.password));
+        user.passwordHash = newHash;
         user.mustChangePassword = user.id !== req.user.id;
         revokeUserSessions(user.id, user.id === req.user.id ? req.sessionHash : null);
         changes.password = "reset";

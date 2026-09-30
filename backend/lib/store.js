@@ -13,6 +13,17 @@ import crypto from "crypto";
 //   interleave inside a single update on Node's single thread.
 // ---------------------------------------------------------------------------
 
+/** Windows briefly refuses a rename while another process reads the file. */
+function renameWithRetry(from, to) {
+  for (let i = 0; ; i++) {
+    try { fs.renameSync(from, to); return; } catch (e) {
+      // only Windows has these short-lived locks; elsewhere the error is real
+      if (process.platform !== "win32" || i >= 8 || !["EPERM", "EBUSY", "EACCES"].includes(e.code)) { try { fs.rmSync(from, { force: true }); } catch { /* ignore */ } throw e; }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (i + 1));
+    }
+  }
+}
+
 export function createStore(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   const abs = (rel) => path.join(dataDir, rel);
@@ -26,13 +37,14 @@ export function createStore(dataDir) {
       if (e.code === "ENOENT") return fallback;
       throw e;
     }
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1); // BOM from Notepad / PowerShell edits
     if (raw.trim() === "") return fallback;
     try {
       return JSON.parse(raw);
     } catch (e) {
       // Try the last known-good copy before giving up.
       try {
-        const bak = JSON.parse(fs.readFileSync(`${file}.bak`, "utf8"));
+        const bak = JSON.parse(fs.readFileSync(`${file}.bak`, "utf8").replace(/^\uFEFF/, ""));
         console.error(`[store] ${rel} is corrupt - recovered from ${rel}.bak`);
         return bak;
       } catch {
@@ -51,7 +63,7 @@ export function createStore(dataDir) {
     if (backup && fs.existsSync(file)) {
       try { fs.copyFileSync(file, `${file}.bak`); } catch { /* best effort */ }
     }
-    fs.renameSync(tmp, file);
+    renameWithRetry(tmp, file);
   }
 
   function appendLine(rel, obj) {

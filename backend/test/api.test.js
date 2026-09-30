@@ -6,6 +6,7 @@ import path from "path";
 import crypto from "crypto";
 import sharp from "sharp";
 import { fileURLToPath } from "url";
+import { execFileSync } from "child_process";
 import { createApp } from "../app.js";
 
 // End-to-end API tests against an isolated temp data directory.
@@ -59,6 +60,21 @@ describe("auth & migration", () => {
     assert.equal(r.body.user.roleId, "superadmin");
     const users = JSON.parse(fs.readFileSync(path.join(dataDir, "users.json"), "utf8"));
     assert.match(users.find((u) => u.email === ADMIN.email).passwordHash, /^scrypt\$/);
+    // the old server's public default has to be replaced straight away
+    assert.equal(r.body.user.mustChangePassword, true);
+    assert.equal((await call("/api/admin/content/docs", { token: r.body.token })).body.code, "PASSWORD_CHANGE_REQUIRED");
+    const reuse = await call("/api/admin/password", { method: "POST", token: r.body.token, body: { current: ADMIN.password, next: ADMIN.password } });
+    assert.equal(reuse.status, 400);
+    const ch = await call("/api/admin/password", { method: "POST", token: r.body.token, body: { current: ADMIN.password, next: "OwnerChosen12345" } });
+    assert.equal(ch.status, 200, JSON.stringify(ch.body));
+    assert.equal(ch.body.user.mustChangePassword, false);
+    ADMIN.password = "OwnerChosen12345";
+    assert.equal((await call("/api/admin/content/docs", { token: r.body.token })).status, 200);
+  });
+  test("a legacy account with its own password is not forced to change it", async () => {
+    const r = await call("/api/admin/login", { method: "POST", body: { email: "support@example.com", password: "Support12345" } });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.user.mustChangePassword, false);
   });
   test("legacy per-user flags migrate to role + extra permissions", async () => {
     const t = await login("support@example.com", "Support12345");
@@ -479,5 +495,168 @@ describe("form spam timer", () => {
   test("a visitor whose clock runs ahead is not blocked", async () => {
     const r = await call("/api/forms/contact/submit", { method: "POST", body: { values, startedAt: Date.now() + 5 * 60_000 } });
     assert.equal(r.status, 201, JSON.stringify(r.body));
+  });
+});
+
+// Runs last: it changes the Super Admin password of the shared test data.
+describe("admin account recovery", () => {
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "../scripts/admin.mjs");
+  const run = (args, dir = dataDir) => execFileSync(process.execPath, [script, ...args], { env: { ...process.env, DATA_DIR: dir }, encoding: "utf8" });
+
+  test("status lists accounts without revealing password hashes", () => {
+    const out = run(["status"]);
+    assert.match(out, /livexperttechnologies@gmail\.com/);
+    const users = JSON.parse(fs.readFileSync(path.join(dataDir, "users.json"), "utf8"));
+    for (const u of users) assert.ok(!out.includes(u.passwordHash), "hash leaked");
+  });
+
+  test("console reset gives a working temporary password and signs out old sessions", async () => {
+    const before = await login(ADMIN.email, ADMIN.password);
+    assert.equal((await call("/api/admin/me", { token: before })).status, 200);
+    const out = run(["reset-password"]);
+    const temp = /Temporary password: (\S+)/.exec(out)?.[1];
+    assert.ok(temp, out);
+    assert.equal((await call("/api/admin/me", { token: before })).status, 401, "old session must be signed out");
+    assert.equal(await login(ADMIN.email, ADMIN.password), undefined, "old password must stop working");
+    const t = await login(ADMIN.email, temp);
+    assert.ok(t, "temporary password must work");
+    const me = await call("/api/admin/me", { token: t });
+    assert.equal(me.body.user.mustChangePassword, true);
+    assert.equal((await call("/api/admin/content/docs", { token: t })).body.code, "PASSWORD_CHANGE_REQUIRED");
+    assert.equal((await call("/api/admin/password", { method: "POST", token: t, body: { current: temp, next: "Recovered12345" } })).status, 200);
+    ADMIN.password = "Recovered12345";
+    assert.equal((await call("/api/admin/content/docs", { token: t })).status, 200, "same session keeps working after choosing a password");
+  });
+
+  test("console reset can set a chosen password and re-creates a missing Super Admin", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kibo360-reset-"));
+    try {
+      assert.throws(() => run(["reset-password", "--password", "Chosen98765abc"], dir), (e) => /does not look like the server's data folder/.test(e.stderr));
+      const out = run(["reset-password", "--password", "Chosen98765abc", "--create"], dir);
+      assert.match(out, /Created the Super Admin/);
+      assert.match(out, /Data folder:/);
+      const users = JSON.parse(fs.readFileSync(path.join(dir, "users.json"), "utf8"));
+      assert.equal(users.length, 1);
+      assert.equal(users[0].roleId, "superadmin");
+      assert.equal(users[0].mustChangePassword, true);
+      assert.throws(() => run(["reset-password", "--password", "short"], dir), (e) => /Password rejected/.test(e.stderr));
+      // never a second Super Admin
+      const again = run(["reset-password"], dir);
+      assert.match(again, /Password reset for livexperttechnologies@gmail\.com/);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "users.json"), "utf8")).length, 1);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test("KIBO_ADMIN_RESET_PASSWORD resets once, not on every restart", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kibo360-envreset-"));
+    const start = async () => {
+      const made = await createApp({ dataDir: dir });
+      const server = await new Promise((res) => { const s = made.app.listen(0, () => res(s)); });
+      return { made, server, url: `http://localhost:${server.address().port}` };
+    };
+    const signIn = async (url, password) => (await (await fetch(`${url}/api/admin/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: ADMIN.email, password }) })).json()).token;
+    process.env.KIBO_ADMIN_RESET_PASSWORD = "EnvReset12345";
+    try {
+      let a = await start();
+      const t = await signIn(a.url, "EnvReset12345");
+      assert.ok(t, "env password must work");
+      const ch = await fetch(`${a.url}/api/admin/password`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ current: "EnvReset12345", next: "MyOwnPass12345" }) });
+      assert.equal(ch.status, 200);
+      a.server.close(); a.made.close();
+      a = await start(); // restart with the variable still set
+      assert.ok(await signIn(a.url, "MyOwnPass12345"), "a restart must not reset the chosen password again");
+      assert.equal(await signIn(a.url, "EnvReset12345"), undefined);
+      a.server.close(); a.made.close();
+    } finally {
+      delete process.env.KIBO_ADMIN_RESET_PASSWORD;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("sign-in throttling", () => {
+  const signIn = (email, password, ip) => call("/api/admin/login", { method: "POST", body: { email, password }, headers: { "X-Forwarded-For": ip } });
+  let email;
+  before(async () => {
+    const superT = await login(ADMIN.email, ADMIN.password);
+    email = "throttle@example.com";
+    await call("/api/admin/users", { method: "POST", token: superT, body: { email, password: "Throttle12345", roleId: "viewer" } });
+  });
+  test("missing email or password is a 400, not a failed attempt", async () => {
+    assert.equal((await call("/api/admin/login", { method: "POST", body: { email } })).status, 400);
+    assert.equal((await call("/api/admin/login", { method: "POST", raw: "email=x", headers: { "Content-Type": "text/plain" } })).status, 400);
+  });
+  test("strangers failing from other networks can't lock out the right password", async () => {
+    for (let i = 0; i < 14; i++) assert.equal((await signIn(email, "WrongPassword1", `203.0.113.${i + 1}`)).status, 401);
+    const ok = await signIn(email, "Throttle12345", "198.51.100.7");
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  });
+  test("one network is paused after repeated failures, with a real wait time", async () => {
+    for (let i = 0; i < 5; i++) await signIn(email, "WrongPassword1", "192.0.2.50");
+    const r = await signIn(email, "Throttle12345", "192.0.2.50");
+    assert.equal(r.status, 429);
+    assert.ok(Number(r.headers.get("retry-after")) > 0);
+    assert.match(r.body.error, /Try again in/);
+    assert.equal((await signIn(email, "Throttle12345", "192.0.2.51")).status, 200, "another network is not affected");
+  });
+});
+
+describe("sign-in hardening, round 2", () => {
+  const signIn = (email, password, ip) => call("/api/admin/login", { method: "POST", body: { email, password }, headers: { "X-Forwarded-For": ip } });
+  let superT;
+  before(async () => { superT = await login(ADMIN.email, ADMIN.password); });
+
+  test("an IPv6 /64 counts as one network", async () => {
+    const email = "ipv6@example.com";
+    await call("/api/admin/users", { method: "POST", token: superT, body: { email, password: "Ipv6Test12345", roleId: "viewer" } });
+    for (let i = 1; i <= 5; i++) await signIn(email, "WrongPassword1", `2001:db8:1:2::${i}`);
+    assert.equal((await signIn(email, "Ipv6Test12345", "2001:db8:1:2::99")).status, 429, "same /64 is paused");
+    assert.equal((await signIn(email, "Ipv6Test12345", "2001:db8:1:3::1")).status, 200, "another /64 is not");
+  });
+
+  test("attempts refused while the queue is full do not keep the owner out", async () => {
+    const email = "queue@example.com";
+    await call("/api/admin/users", { method: "POST", token: superT, body: { email, password: "QueueTest12345", roleId: "viewer" } });
+    for (let i = 1; i <= 11; i++) await signIn(email, "WrongPassword1", `198.18.${i}.1`); // > 10 failures: queueing starts
+    // a burst of refused / queued attempts from many networks...
+    await Promise.all(Array.from({ length: 30 }, (_, i) => signIn(email, "WrongPassword1", `198.19.${i}.1`)));
+    // ...must not leave a stale gate: the right password gets in within a few seconds
+    const t0 = Date.now();
+    const ok = await signIn(email, "QueueTest12345", "192.0.2.200");
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.ok(Date.now() - t0 < 15_000, "no long wait after the burst");
+  });
+
+  test("changing your own password through the team screen is refused", async () => {
+    const me = await call("/api/admin/me", { token: superT });
+    const r = await call(`/api/admin/users/${me.body.user.id}`, { method: "PATCH", token: superT, body: { password: "SomethingNew12345" } });
+    assert.equal(r.status, 400);
+  });
+
+  test("the old public default is refused as a reset password and flagged when still in use", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kibo360-default-"));
+    const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "../scripts/admin.mjs");
+    const run = (args) => execFileSync(process.execPath, [script, ...args], { env: { ...process.env, DATA_DIR: dir }, encoding: "utf8" });
+    try {
+      assert.throws(() => run(["reset-password", "--create", "--password", "Kibo360@Admin"]), (e) => /publicly known/.test(e.stderr));
+      // an account the previous release already upgraded (scrypt of the public default)
+      const { hashPassword } = await import("../lib/security.js");
+      fs.writeFileSync(path.join(dir, "users.json"), JSON.stringify([{ id: "u_x", email: ADMIN.email, name: "Owner", roleId: "superadmin", extraPermissions: [], passwordHash: hashPassword("Kibo360@Admin"), active: true }]));
+      assert.match(run(["status"]), /old public default/);
+      const made = await createApp({ dataDir: dir });
+      const server = await new Promise((res) => { const s = made.app.listen(0, () => res(s)); });
+      try {
+        const r = await (await fetch(`http://localhost:${server.address().port}/api/admin/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: ADMIN.email, password: "Kibo360@Admin" }) })).json();
+        assert.equal(r.user.mustChangePassword, true, "must choose a new password even with a scrypt hash");
+      } finally { server.close(); made.close(); }
+      process.env.KIBO_ADMIN_RESET_PASSWORD = "Kibo360@Admin";
+      const made2 = await createApp({ dataDir: dir }); // ignored with a clear log line, not applied
+      made2.close();
+      const users = JSON.parse(fs.readFileSync(path.join(dir, "users.json"), "utf8"));
+      assert.equal(users[0].resetHash, undefined);
+    } finally {
+      delete process.env.KIBO_ADMIN_RESET_PASSWORD;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

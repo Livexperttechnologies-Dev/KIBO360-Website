@@ -9,6 +9,7 @@ const TOKEN_KEY = "kibo360-admin-token";
 
 let token = (() => { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; } })();
 const expiredListeners = new Set();
+const pwListeners = new Set();
 
 export const getToken = () => token;
 export function setToken(t) {
@@ -16,6 +17,8 @@ export function setToken(t) {
   try { if (token) sessionStorage.setItem(TOKEN_KEY, token); else sessionStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
 }
 export function onSessionExpired(fn) { expiredListeners.add(fn); return () => expiredListeners.delete(fn); }
+/** The server wants a new password before anything else (e.g. after a reset). */
+export function onPasswordChangeRequired(fn) { pwListeners.add(fn); return () => pwListeners.delete(fn); }
 
 export class ApiError extends Error {
   constructor(message, status, data) { super(message); this.status = status; this.data = data; }
@@ -41,10 +44,18 @@ export async function api(path, { method = "GET", body, signal, keepalive } = {}
     if (e.name === "AbortError") throw e;
     throw new ApiError("Can't reach the server - check your connection", 0, null);
   }
-  const data = await res.json().catch(() => ({}));
+  const isJson = /json/i.test(res.headers.get("content-type") || "");
+  const data = isJson ? await res.json().catch(() => ({})) : {};
+  if (res.ok && !isJson) {
+    // e.g. a web page served where the API was expected - never "succeed" silently
+    throw new ApiError("The server sent an unexpected answer - the API address may be wrong or the backend is not running", res.status, null);
+  }
   if (res.status === 401 && token && !path.endsWith("/login")) {
     expired();
     throw new ApiError("Your session has expired - please sign in again", 401, data);
+  }
+  if (res.status === 403 && data.code === "PASSWORD_CHANGE_REQUIRED") {
+    for (const fn of pwListeners) { try { fn(); } catch { /* ignore */ } }
   }
   if (!res.ok || data.ok === false) throw new ApiError(data.error || `Request failed (${res.status})`, res.status, data);
   return data;
@@ -64,6 +75,7 @@ export function upload(path, file, fields = {}, onProgress) {
       let data = {};
       try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* not json */ }
       if (xhr.status === 401) { expired(); return reject(new ApiError("Your session has expired", 401, data)); }
+      if (xhr.status === 403 && data.code === "PASSWORD_CHANGE_REQUIRED") for (const fn of pwListeners) { try { fn(); } catch { /* ignore */ } }
       if (xhr.status >= 400 || data.ok === false) return reject(new ApiError(data.error || `Upload failed (${xhr.status})`, xhr.status, data));
       resolve(data);
     };
