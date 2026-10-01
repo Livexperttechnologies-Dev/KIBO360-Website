@@ -5,8 +5,9 @@ import Footer from "./components/Footer.jsx";
 import BackToTop from "./components/BackToTop.jsx";
 import FloatingWidgets from "./components/FloatingWidgets.jsx";
 import { DemoModalProvider } from "./components/DemoModalContext.jsx";
-import { AnnouncementBar, ConsentAndAnalytics } from "./components/SiteChrome.jsx";
+import { AnnouncementBar, ConsentAndAnalytics, CustomCode } from "./components/SiteChrome.jsx";
 import { useCms } from "./cms/content.jsx";
+import { pageBoot } from "./lib/pageBoot.js";
 
 // The editing layer only loads inside the Super Admin editor iframe.
 const EditorBridge = lazy(() => import("./cms/EditorBridge.jsx"));
@@ -16,6 +17,9 @@ export default function App() {
   const navigate = useNavigate();
   const { mode, previewInfo } = useCms();
   const editing = mode === "edit";
+
+  // Super Admin checks this to start in a fresh page (see routes.jsx).
+  useEffect(() => { pageBoot.publicRendered = true; }, []);
 
   // Scroll to top on every route change.
   useEffect(() => {
@@ -89,6 +93,7 @@ export default function App() {
         {!editing && <BackToTop />}
         {!editing && <FloatingWidgets />}
         <ConsentAndAnalytics />
+        {!editing && <CustomCode />}
         {editing && (
           <Suspense fallback={null}>
             <EditorBridge />

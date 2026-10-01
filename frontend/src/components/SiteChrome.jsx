@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useCms, useSite } from "../cms/content.jsx";
+import { useCms, useContentSync, useSite } from "../cms/content.jsx";
 import { sanitizeHtml } from "../cms/sanitize.js";
 import { Btn } from "../cms/primitives.jsx";
 import { captureAttribution, getConsent, setConsent, loadAnalytics, trackPageView, hasAnalytics } from "../cms/tracking.js";
+import { activeSnippets, hasGatedSnippets, snippetKey, syncSnippets } from "../cms/customCode.js";
+
+/** The visitor's cookie choice: undefined = not read yet, null = not decided. */
+function useConsent() {
+  const [consent, setLocalConsent] = useState(undefined);
+  useEffect(() => {
+    const read = () => setLocalConsent(getConsent());
+    read();
+    window.addEventListener("kibo-consent", read);
+    return () => window.removeEventListener("kibo-consent", read);
+  }, []);
+  return consent;
+}
 
 /** Announcement bars managed in Super Admin -> Banners. */
 export function AnnouncementBar() {
@@ -49,28 +62,25 @@ export function AnnouncementBar() {
  */
 export function ConsentAndAnalytics() {
   const { mode } = useCms();
-  const { settings } = useSite();
+  const { settings, code } = useSite();
   const { pathname } = useLocation();
-  const [consent, setLocalConsent] = useState(undefined); // undefined = not read yet
+  const consent = useConsent();
   const a = settings.analytics;
   const c = settings.cookies;
   const wantsAnalytics = hasAnalytics(a);
-  const needConsent = wantsAnalytics && a.requireConsent !== false;
+  // header/footer scripts marked "needs cookie consent" count as tracking too
+  const needConsent = (wantsAnalytics || hasGatedSnippets(code, mode)) && a.requireConsent !== false;
 
   useEffect(() => { captureAttribution(); }, []);
-  useEffect(() => {
-    const read = () => setLocalConsent(getConsent());
-    read();
-    window.addEventListener("kibo-consent", read);
-    return () => window.removeEventListener("kibo-consent", read);
-  }, []);
   useEffect(() => {
     if (mode !== "live" || !wantsAnalytics || consent === undefined) return;
     if (!needConsent || consent?.analytics) loadAnalytics(a);
   }, [mode, wantsAnalytics, needConsent, consent, a]);
   useEffect(() => { if (mode === "live") trackPageView(); }, [pathname, mode]);
 
-  const show = mode === "live" && consent === null && (needConsent || c.enabled);
+  // Previews show the banner too (they show what visitors will see); they
+  // never load the analytics tags themselves.
+  const show = (mode === "live" || mode === "preview") && consent === null && (needConsent || c.enabled);
   if (!show) return null;
   return (
     <div className="cookie-bar" role="dialog" aria-live="polite" aria-label="Cookie consent">
@@ -82,4 +92,30 @@ export function ConsentAndAnalytics() {
       </div>
     </div>
   );
+}
+
+/**
+ * Header & footer scripts from Super Admin. Runs on the live site (and on
+ * preview links for snippets marked so) - never in the visual editor, and
+ * never in Super Admin (it is not part of the admin app at all).
+ */
+export function CustomCode() {
+  const { code, settings } = useSite();
+  const { mode } = useCms();
+  const sync = useContentSync();
+  const { pathname } = useLocation();
+  const consent = useConsent();
+  const consentOk = settings.analytics?.requireConsent === false || consent?.analytics === true;
+  // Start once the cookie choice has been read (so list order holds) and the
+  // content is known to be current - code removed or switched off since this
+  // page was built must never run. Unreachable API: the page's own copy runs.
+  const ready = consent !== undefined && (mode !== "live" || sync === "fresh" || sync === "offline");
+  const list = ready ? activeSnippets(code, { mode, pathname, consentOk }) : null;
+  const signature = list ? list.map(snippetKey).join("|") : null;
+  useEffect(() => {
+    if (list) syncSnippets(list);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+  useEffect(() => () => { syncSnippets([]); }, []);
+  return null;
 }

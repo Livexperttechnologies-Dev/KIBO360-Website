@@ -49,6 +49,7 @@ export const NAV = [
       { to: "/admin/site/menus", label: "Menus", icon: "menu", perm: "site.edit" },
       { to: "/admin/site/banners", label: "Banners", icon: "megaphone", perm: "site.edit" },
       { to: "/admin/site/settings", label: "Website Settings", icon: "settings", perm: "site.edit" },
+      { to: "/admin/site/code", label: "Header & Footer Scripts", icon: "code", perm: "site.code" },
     ],
   },
   {
@@ -67,7 +68,7 @@ export const NAV = [
       { to: "/admin/team", label: "Team Access", icon: "key", perm: "users.manage" },
       { to: "/admin/roles", label: "Roles & Permissions", icon: "shield", perm: ["roles.manage", "users.manage"] },
       { to: "/admin/history", label: "Change History", icon: "history", perm: "audit.view" },
-      { to: "/admin/revisions", label: "Revision History", icon: "layers", perm: ["pages.view", "seo.view", "site.edit", "forms.edit"] },
+      { to: "/admin/revisions", label: "Revision History", icon: "layers", perm: CONTENT_PERMS },
     ],
   },
 ];
@@ -376,7 +377,7 @@ function Shell() {
         <Route path="editor" element={<Guard perm="pages.view"><Editor /></Guard>} />
         <Route path="media" element={<Guard perm="media.view"><Media /></Guard>} />
         <Route path="seo/*" element={<Guard perm="seo.view"><Seo /></Guard>} />
-        <Route path="site/*" element={<Guard perm="site.edit"><Site /></Guard>} />
+        <Route path="site/*" element={<Guard perm={["site.edit", "site.code"]}><Site /></Guard>} />
         <Route path="forms" element={<Guard perm="forms.edit"><Forms /></Guard>} />
         <Route path="submissions" element={<Guard perm="submissions.view"><Submissions /></Guard>} />
         <Route path="leads" element={<Guard perm="leads.view"><Leads /></Guard>} />

@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useCms } from "../cms/content.jsx";
 import { pageById } from "../cms/pageMeta.js";
 import { computeSeo, headTags } from "../cms/seo.js";
+import { SNIPPET_ATTR } from "../cms/customCode.js";
 
 /**
  * Collector used during server rendering: the Seo component deposits the
@@ -13,7 +14,7 @@ export const HeadCollectorContext = createContext(null);
 const MANAGED = [
   'meta[name="description"]', 'meta[name="keywords"]', 'meta[name="robots"]', 'link[rel="canonical"]',
   'meta[property^="og:"]', 'meta[name^="twitter:"]', 'script[type="application/ld+json"]',
-];
+].map((sel) => `${sel}:not([${SNIPPET_ATTR}])`); // tags added by header scripts are not ours to remove
 
 function applyHead(seo) {
   document.title = seo.title;
@@ -22,7 +23,7 @@ function applyHead(seo) {
   document.head.querySelectorAll(`[data-kibo-head], ${MANAGED.join(", ")}`).forEach((el) => el.remove());
   for (const t of headTags(seo)) {
     if (t.tag === "link" && t.attrs.rel === "icon") {
-      const icon = document.head.querySelector('link[rel="icon"]');
+      const icon = document.head.querySelector(`link[rel="icon"]:not([${SNIPPET_ATTR}])`);
       if (icon) { icon.setAttribute("href", t.attrs.href); continue; }
     }
     const el = document.createElement(t.tag);

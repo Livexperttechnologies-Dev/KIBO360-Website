@@ -396,6 +396,287 @@ describe("shared code", () => {
   });
 });
 
+describe("header & footer scripts", () => {
+  let superT, webT, mktT, codeT;
+  const member = async (email, roleId) => {
+    const r = await call("/api/admin/users", { method: "POST", token: superT, body: { email, password: "Password12345", roleId } });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const t = await login(email, "Password12345");
+    assert.equal((await call("/api/admin/password", { method: "POST", token: t, body: { current: "Password12345", next: "Chosen12345678" } })).status, 200);
+    return t;
+  };
+  const snip = (over = {}) => ({ id: "sn_chat", name: "Chat widget", location: "bodyEnd", code: "<script>window.__chat = 1</script>", enabled: true, pages: ["*"], consent: "none", preview: false, ...over });
+  const site = async (t = superT) => (await call("/api/admin/content/doc/site", { token: t })).body;
+  const liveSnippets = async () => (await call("/api/content/published")).body.docs.site?.code?.snippets || [];
+  const setCode = (t, snippets) => call("/api/admin/content/doc/site", { method: "PATCH", token: t, body: { code: { snippets } } });
+  const publishSite = (t) => call("/api/admin/content/publish", { method: "POST", token: t, body: { docIds: ["site"] } });
+
+  before(async () => {
+    superT = await login(ADMIN.email, ADMIN.password);
+    webT = await member("web-admin@example.com", "website_admin");
+    mktT = await member("marketing@example.com", "marketing_manager");
+    const role = await call("/api/admin/roles", { method: "POST", token: superT, body: { name: "Script Manager", permissions: ["dashboard.view", "site.code"] } });
+    assert.equal(role.status, 201, JSON.stringify(role.body));
+    codeT = await member("scripts@example.com", role.body.role.id);
+  });
+
+  test("only the Super Admin has the scripts permission out of the box", async () => {
+    const r = await call("/api/admin/roles", { token: superT });
+    assert.ok(r.body.permissions.some((p) => p.key === "site.code"));
+    for (const role of r.body.roles.filter((x) => x.builtin && x.id !== "superadmin")) assert.ok(!role.permissions.includes("site.code"), role.id);
+    assert.ok((await call("/api/admin/me", { token: superT })).body.user.permissions.includes("site.code"));
+  });
+
+  test("snippets are normalised on save, the code itself is kept as written", async () => {
+    const r = await setCode(superT, [
+      { id: "dup", name: "  ", location: "nowhere", code: "<script>a()</script>\u0000", pages: ["*", "/about", "../etc", "javascript:x"], consent: "maybe" },
+      { id: "dup", location: "bodyStart", code: "<p onclick=\"x()\">hi</p>", enabled: false, preview: true, consent: "analytics" },
+      "junk",
+    ]);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const [a, b, ...rest] = r.body.data.code.snippets;
+    assert.equal(rest.length, 0);
+    assert.deepEqual(a, { id: "dup", name: "Custom code", location: "head", code: "<script>a()</script>", enabled: true, pages: ["*", "/about"], consent: "none", preview: false });
+    assert.notEqual(b.id, "dup", "duplicate ids get a fresh one");
+    assert.match(b.id, /^sn_[a-z0-9]+$/);
+    assert.equal(b.code, "<p onclick=\"x()\">hi</p>", "custom code is not sanitised - it is meant to run");
+    assert.equal(b.location, "bodyStart");
+    assert.equal(b.enabled, false);
+    assert.equal(b.preview, true);
+    assert.equal(b.consent, "analytics");
+    const many = await setCode(superT, Array.from({ length: 40 }, (_, i) => ({ id: `s${i}`, code: "<b>x</b>" })));
+    assert.equal(many.body.data.code.snippets.length, 30);
+    const long = await setCode(superT, [{ id: "big", code: "x".repeat(60000) }]);
+    assert.equal(long.body.data.code.snippets[0].code.length, 50000);
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+  });
+
+  test("people without the scripts permission can't add or change code", async () => {
+    assert.equal((await setCode(webT, [snip()])).status, 403);
+    assert.equal((await setCode(mktT, [snip()])).status, 403);
+    // ...but can still edit the rest of the site document
+    assert.equal((await call("/api/admin/content/doc/site", { method: "PATCH", token: webT, body: { footer: { motto: "Care, connected" } } })).status, 200);
+    // and a scripts-only role can edit only the scripts
+    assert.equal((await call("/api/admin/content/doc/site", { method: "PATCH", token: codeT, body: { header: { showCta: false } } })).status, 403);
+    assert.equal((await site(codeT)).ok, true, "scripts-only role can read the site document");
+  });
+
+  test("without the scripts permission you publish everything except the scripts", async () => {
+    assert.equal((await setCode(codeT, [snip()])).status, 200);
+    // the draft now holds a footer change (website admin) and a script (scripts role)
+    const p1 = await publishSite(webT);
+    assert.equal(p1.status, 200, JSON.stringify(p1.body));
+    assert.deepEqual(p1.body.keptAsDraft, ["site"]);
+    assert.equal((await liveSnippets()).length, 0, "the script did not go live");
+    let doc = await site();
+    assert.equal(doc.published.footer.motto, "Care, connected", "the footer change did");
+    assert.deepEqual(doc.data.code.snippets.map((s) => s.id), ["sn_chat"], "the script change is still a draft");
+    assert.equal(doc.status.dirty, true);
+    // only the script is left: nothing these people may publish or schedule
+    const p2 = await publishSite(mktT);
+    assert.equal(p2.status, 400);
+    assert.match(p2.body.error, /scripts permission/);
+    const sched = await call("/api/admin/content/schedules", { method: "POST", token: webT, body: { docIds: ["site"], at: new Date(Date.now() + 3600_000).toISOString() } });
+    assert.equal(sched.status, 400);
+    // editing scripts is not publishing: the scripts-only role can't publish
+    assert.equal((await publishSite(codeT)).status, 403);
+    assert.equal((await liveSnippets()).length, 0, "nothing went live");
+    const ok = await publishSite(superT);
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.deepEqual(ok.body.keptAsDraft, []);
+    assert.deepEqual((await liveSnippets()).map((s) => s.id), ["sn_chat"]);
+    doc = await site();
+    assert.equal(doc.status.dirty, false);
+    // header/footer-only change: a website admin may publish it
+    assert.equal((await call("/api/admin/content/doc/site", { method: "PATCH", token: webT, body: { footer: { motto: "Care, connected v2" } } })).status, 200);
+    const p = await publishSite(webT);
+    assert.equal(p.status, 200, JSON.stringify(p.body));
+    assert.deepEqual((await liveSnippets()).map((s) => s.id), ["sn_chat"], "publishing the footer keeps the live scripts");
+  });
+
+  test("switched-off snippets never reach visitors, live or in previews", async () => {
+    await setCode(superT, [snip(), snip({ id: "sn_off", enabled: false, code: "<script>unfinished()</script>" }), snip({ id: "sn_pv", preview: true })]);
+    assert.equal((await publishSite(superT)).status, 200);
+    const live = await call("/api/content/published");
+    assert.deepEqual(live.body.docs.site.code.snippets.map((s) => s.id), ["sn_chat", "sn_pv"]);
+    assert.ok(!JSON.stringify(live.body).includes("unfinished()"));
+    // still kept for the editors
+    assert.ok((await site()).published.code.snippets.some((s) => s.id === "sn_off"));
+    const c = await call("/api/admin/content/previews", { method: "POST", token: superT, body: { label: "scripts", hours: 1 } });
+    const pv = await call(`/api/preview/${c.body.token}`);
+    assert.deepEqual(pv.body.docs.site.code.snippets.map((s) => s.id), ["sn_chat", "sn_pv"]);
+    await call(`/api/admin/content/previews/${c.body.preview.id}`, { method: "DELETE", token: superT });
+    // a scripts-only role may create preview links to try its code
+    assert.equal((await call("/api/admin/content/previews", { method: "POST", token: codeT, body: { label: "try", hours: 1 } })).status, 201);
+  });
+
+  test("discard and restore keep script drafts someone else may not touch", async () => {
+    const before = await site();
+    await setCode(superT, [...before.data.code.snippets, snip({ id: "sn_draft", code: "<script>draft()</script>" })]);
+    await call("/api/admin/content/doc/site", { method: "PATCH", token: webT, body: { footer: { motto: "Temporary" } } });
+    const d = await call("/api/admin/content/doc/site/discard", { method: "POST", token: webT });
+    assert.equal(d.status, 200);
+    assert.deepEqual(d.body.kept, ["code"]);
+    let doc = await site();
+    assert.equal(doc.data.footer.motto, doc.published.footer.motto, "the footer change was discarded");
+    assert.ok(doc.data.code.snippets.some((s) => s.id === "sn_draft"), "the script draft was kept");
+    assert.equal(doc.status.dirty, true);
+    // the scripts-only role discards only what it may edit
+    await call("/api/admin/content/doc/site", { method: "PATCH", token: webT, body: { footer: { motto: "Keep me" } } });
+    const d2 = await call("/api/admin/content/doc/site/discard", { method: "POST", token: codeT });
+    assert.deepEqual(d2.body.kept, ["footer"]);
+    doc = await site();
+    assert.equal(doc.data.footer.motto, "Keep me");
+    assert.ok(!doc.data.code.snippets.some((s) => s.id === "sn_draft"), "script draft discarded by someone allowed to");
+    // the super admin discards everything
+    assert.deepEqual((await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT })).body.kept, []);
+    assert.equal((await site()).status.dirty, false);
+
+    // restore: an older revision with different scripts
+    const revs = (await call("/api/admin/content/doc/site/revisions", { token: superT })).body.revisions;
+    const oldest = revs[revs.length - 1];
+    const old = (await call(`/api/admin/content/doc/site/revisions/${oldest.rev}`, { token: superT })).body.revision.data;
+    assert.notDeepEqual(old.code, (await site()).published.code, "the oldest revision has other scripts");
+    const r = await call("/api/admin/content/doc/site/restore", { method: "POST", token: webT, body: { rev: oldest.rev } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.kept, ["code"]);
+    doc = await site();
+    assert.deepEqual(doc.data.code, doc.published.code, "restoring by a website admin leaves the scripts alone");
+    assert.equal((await publishSite(webT)).status, 200, "and so it can still be published by them");
+    const r2 = await call("/api/admin/content/doc/site/restore", { method: "POST", token: superT, body: { rev: oldest.rev } });
+    assert.deepEqual(r2.body.kept, []);
+    assert.deepEqual((await site()).data.code, old.code, "the super admin restores the scripts too");
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+  });
+
+  test("script edits are in the audit trail", async () => {
+    const r = await call("/api/admin/audit?limit=500", { token: superT });
+    const e = r.body.entries.find((x) => x.action === "content.scripts_edited");
+    assert.ok(e, "content.scripts_edited recorded");
+    assert.ok(e.userEmail);
+  });
+
+  test("a schedule with a script change is refused when its creator lost the permission", async () => {
+    // a custom role that loses site.code after scheduling
+    const role = await call("/api/admin/roles", { method: "POST", token: superT, body: { name: "Temp Scripts", permissions: ["site.code", "site.publish"] } });
+    const t = await member("temp-scripts@example.com", role.body.role.id);
+    const live = await liveSnippets();
+    await setCode(t, [...live, snip({ id: "sn_sched", code: "<script>scheduled()</script>" })]);
+    const s = await call("/api/admin/content/schedules", { method: "POST", token: t, body: { docIds: ["site"], at: new Date(Date.now() + 61_000).toISOString() } });
+    assert.equal(s.status, 201, JSON.stringify(s.body));
+    assert.equal((await call(`/api/admin/roles/${role.body.role.id}`, { method: "PATCH", token: superT, body: { permissions: ["site.publish"] } })).status, 200);
+    const file = path.join(dataDir, "content/schedules.json");
+    const list = JSON.parse(fs.readFileSync(file, "utf8"));
+    list.find((x) => x.id === s.body.schedule.id).at = new Date(Date.now() - 1000).toISOString();
+    fs.writeFileSync(file, JSON.stringify(list));
+    svc.content.runDueSchedules();
+    assert.ok(!(await liveSnippets()).some((x) => x.id === "sn_sched"), "the scheduled script must not go live");
+    const after = (await call("/api/admin/content/schedules", { token: superT })).body.schedules.find((x) => x.id === s.body.schedule.id);
+    assert.equal(after.status, "failed");
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+  });
+
+  test("undo back to before the first script removes the scripts from the draft", async () => {
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+    const live = await liveSnippets();
+    // a site whose live version has no scripts: start from a clean draft without them
+    await setCode(superT, []);
+    let doc = await site();
+    assert.equal(doc.data.code, undefined, "an empty list is stored as no scripts");
+    // the editor sends null for a section that no longer exists in its draft
+    await setCode(superT, [snip({ id: "sn_undo" })]);
+    const r = await call("/api/admin/content/doc/site", { method: "PATCH", token: superT, body: { code: null } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    doc = await site();
+    assert.equal(doc.data.code, undefined);
+    assert.ok(!JSON.stringify(doc.data).includes("sn_undo"));
+    // removing scripts is a script change: not for people without the permission
+    assert.equal((await call("/api/admin/content/doc/site", { method: "PATCH", token: webT, body: { code: null } })).status, 403);
+    // put the live scripts back for the next tests
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+    assert.deepEqual((await liveSnippets()).map((s) => s.id), live.map((s) => s.id));
+  });
+
+  test("a schedule saved before scripts existed keeps the live scripts", async () => {
+    await call("/api/admin/content/doc/site", { method: "PATCH", token: superT, body: { footer: { motto: "Old-style schedule" } } });
+    const s = await call("/api/admin/content/schedules", { method: "POST", token: superT, body: { docIds: ["site"], at: new Date(Date.now() + 61_000).toISOString() } });
+    assert.equal(s.status, 201, JSON.stringify(s.body));
+    // make it look like one saved by the previous release: no liveCode, no scripts in the snapshot
+    const file = path.join(dataDir, "content/schedules.json");
+    let list = JSON.parse(fs.readFileSync(file, "utf8"));
+    const old = list.find((x) => x.id === s.body.schedule.id);
+    delete old.liveCode;
+    delete old.snapshot.site.code;
+    old.at = new Date(Date.now() - 1000).toISOString();
+    fs.writeFileSync(file, JSON.stringify(list));
+    const before = (await liveSnippets()).map((x) => x.id);
+    assert.ok(before.length > 0);
+    svc.content.runDueSchedules();
+    list = (await call("/api/admin/content/schedules", { token: superT })).body.schedules;
+    assert.equal(list.find((x) => x.id === s.body.schedule.id).status, "done");
+    assert.equal((await site()).published.footer.motto, "Old-style schedule");
+    assert.deepEqual((await liveSnippets()).map((x) => x.id), before, "the live scripts survived");
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+  });
+
+  test("status names the changed site sections; a scripts-only site draft is skipped in a bigger publish", async () => {
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+    const live = await liveSnippets();
+    await setCode(superT, [...live, snip({ id: "sn_pending" })]);
+    let doc = await site();
+    assert.deepEqual(doc.status.changed, ["code"]);
+    // the website admin publishes a page together with the site settings:
+    // the page goes live, the site (only scripts pending) is left as a draft
+    assert.equal((await call("/api/admin/content/doc/page:privacy", { method: "PATCH", token: webT, body: { fields: { title: "Privacy (multi publish)" } } })).status, 200);
+    const p = await call("/api/admin/content/publish", { method: "POST", token: webT, body: { docIds: ["page:privacy", "site"] } });
+    assert.equal(p.status, 200, JSON.stringify(p.body));
+    assert.deepEqual(p.body.keptAsDraft, ["site"]);
+    assert.equal((await call("/api/content/published")).body.docs["page:privacy"].fields.title, "Privacy (multi publish)");
+    assert.ok(!(await liveSnippets()).some((s) => s.id === "sn_pending"));
+    // same for schedules: the site is left out of the snapshot
+    await call("/api/admin/content/doc/page:privacy", { method: "PATCH", token: webT, body: { fields: { title: "Privacy (scheduled)" } } });
+    const s = await call("/api/admin/content/schedules", { method: "POST", token: webT, body: { docIds: ["page:privacy", "site"], at: new Date(Date.now() + 3600_000).toISOString() } });
+    assert.equal(s.status, 201, JSON.stringify(s.body));
+    assert.deepEqual(s.body.schedule.docIds, ["page:privacy"]);
+    assert.equal((await call(`/api/admin/content/schedules/${s.body.schedule.id}`, { method: "DELETE", token: webT })).status, 200);
+    doc = await site();
+    assert.deepEqual(doc.status.changed, ["code"], "the script draft is untouched");
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+    await call("/api/admin/content/doc/page:privacy/discard", { method: "POST", token: superT });
+    assert.deepEqual((await site()).status.changed, []);
+  });
+
+  test("a scripts-only role sees the preview links it can create and revoke", async () => {
+    const c = await call("/api/admin/content/previews", { method: "POST", token: codeT, body: { label: "mine", hours: 1 } });
+    assert.equal(c.status, 201);
+    const l = await call("/api/admin/content/previews", { token: codeT });
+    assert.equal(l.status, 200);
+    assert.ok(l.body.previews.some((p) => p.id === c.body.preview.id));
+    assert.equal((await call(`/api/admin/content/previews/${c.body.preview.id}`, { method: "DELETE", token: codeT })).status, 200);
+  });
+
+  test("a scheduled footer change never rolls back scripts published after it was scheduled", async () => {
+    await call("/api/admin/content/doc/site", { method: "PATCH", token: webT, body: { footer: { motto: "Scheduled motto" } } });
+    const s = await call("/api/admin/content/schedules", { method: "POST", token: webT, body: { docIds: ["site"], at: new Date(Date.now() + 61_000).toISOString() } });
+    assert.equal(s.status, 201, JSON.stringify(s.body));
+    // meanwhile the super admin publishes a new script
+    await call("/api/admin/content/doc/site/discard", { method: "POST", token: superT });
+    const live = await liveSnippets();
+    await setCode(superT, [...live, snip({ id: "sn_later", code: "<script>later()</script>" })]);
+    assert.equal((await publishSite(superT)).status, 200);
+    const file = path.join(dataDir, "content/schedules.json");
+    const list = JSON.parse(fs.readFileSync(file, "utf8"));
+    list.find((x) => x.id === s.body.schedule.id).at = new Date(Date.now() - 1000).toISOString();
+    fs.writeFileSync(file, JSON.stringify(list));
+    svc.content.runDueSchedules();
+    const after = (await call("/api/admin/content/schedules", { token: superT })).body.schedules.find((x) => x.id === s.body.schedule.id);
+    assert.equal(after.status, "done", after.error);
+    const doc = await site();
+    assert.equal(doc.published.footer.motto, "Scheduled motto");
+    assert.ok((await liveSnippets()).some((x) => x.id === "sn_later"), "the later script publish is still live");
+  });
+});
+
 describe("security hardening", () => {
   let superT;
   // creates a user, replaces the temporary password and returns a token

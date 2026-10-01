@@ -16,21 +16,40 @@ import { API_BASE } from "../lib/apiBase.js";
 const EMPTY = { docs: {}, version: 0, mode: "live" };
 const CmsCtx = createContext({ ...EMPTY, setDocs: () => {}, editor: null });
 const ScopeCtx = createContext({ docId: null, prefix: "" });
+// Is the content known to be current? (live mode; previews and the editor
+// always load fresh drafts). Kept apart from CmsCtx so the check finishing
+// doesn't re-render the whole site.
+//   "pending"  still checking with the server
+//   "fresh"    current (or the server rendered this page just now)
+//   "offline"  the API couldn't be reached - the page's own content is used
+//   "stale"    a newer version exists but couldn't be loaded
+const SyncCtx = createContext("fresh");
 
 export function ContentProvider({ initial, editor = null, children }) {
   const [state, setState] = useState(() => ({ ...EMPTY, ...initial, docs: initial?.docs || {} }));
+  const [sync, setSync] = useState(() => ((initial?.mode || "live") !== "live" || initial?.fresh ? "fresh" : "pending"));
   const setDocs = useCallback((docs, extra = {}) => setState((s) => ({ ...s, ...extra, docs: typeof docs === "function" ? docs(s.docs) : docs })), []);
   const setMode = useCallback((mode, extra = {}) => setState((s) => ({ ...s, ...extra, mode })), []);
   const value = useMemo(() => ({ ...state, setDocs, setMode, editor }), [state, setDocs, setMode, editor]);
 
   // Live visitors on a statically-built page: pick up anything published
   // since the build without a redeploy (cheap version check, then refetch).
-  useLiveRefresh(state.mode, state.version, setDocs);
+  useLiveRefresh(state.mode, state.version, setDocs, setSync);
 
-  return <CmsCtx.Provider value={value}>{children}</CmsCtx.Provider>;
+  return <CmsCtx.Provider value={value}><SyncCtx.Provider value={sync}>{children}</SyncCtx.Provider></CmsCtx.Provider>;
 }
 
-function useLiveRefresh(mode, version, setDocs) {
+/** fetch JSON with a time limit (a hanging API must not hold the page back forever) */
+async function getJson(path, cache) {
+  const ctrl = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 12_000) : null;
+  try {
+    const r = await fetch(`${API_BASE}${path}`, { cache, signal: ctrl?.signal });
+    return r.ok ? await r.json() : null;
+  } finally { clearTimeout(timer); }
+}
+
+function useLiveRefresh(mode, version, setDocs, setSync) {
   // Runs once per shipped version: after a refresh the version matches and
   // the next check is a no-op. (No "already checked" ref - StrictMode's
   // mount/unmount/mount would cancel the only attempt.)
@@ -38,16 +57,29 @@ function useLiveRefresh(mode, version, setDocs) {
     if (mode !== "live" || typeof window === "undefined") return undefined;
     let cancelled = false;
     (async () => {
-      try {
-        const v = await fetch(`${API_BASE}/api/content/version`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null));
-        if (!v?.ok || cancelled || v.version === version) return;
-        const d = await fetch(`${API_BASE}/api/content/published`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null));
-        if (d?.ok && !cancelled) setDocs(d.docs, { version: d.version });
-      } catch { /* offline - keep what the page shipped with */ }
+      let v = null;
+      try { v = await getJson("/api/content/version", "no-store"); } catch { /* offline */ }
+      if (cancelled) return;
+      // can't reach the API: keep what the page shipped with
+      if (!v?.ok) { setSync((s) => (s === "fresh" ? s : "offline")); return; }
+      if (v.version === version) { setSync("fresh"); return; }
+      for (let i = 0; i < 3 && !cancelled; i++) {
+        try {
+          const d = await getJson("/api/content/published", "no-cache");
+          // new version in place - this effect runs again and confirms it
+          if (d?.ok) { if (!cancelled) setDocs(d.docs, { version: d.version }); return; }
+        } catch { /* retry below */ }
+        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+      }
+      // newer content exists but couldn't be loaded: the page's copy is outdated
+      if (!cancelled) setSync((s) => (s === "fresh" ? s : "stale"));
     })();
     return () => { cancelled = true; };
-  }, [mode, version, setDocs]);
+  }, [mode, version, setDocs, setSync]);
 }
+
+/** See SyncCtx. */
+export const useContentSync = () => useContext(SyncCtx);
 
 export const useCms = () => useContext(CmsCtx);
 export const useScope = () => useContext(ScopeCtx);

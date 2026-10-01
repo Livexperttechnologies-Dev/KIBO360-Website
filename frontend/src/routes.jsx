@@ -12,14 +12,26 @@ import Terms from "./pages/Terms.jsx";
 import ThankYou from "./pages/ThankYou.jsx";
 import DynamicPage from "./pages/DynamicPage.jsx";
 import { BUILTIN_REDIRECTS } from "./cms/pageMeta.js";
+import { pageBoot } from "./lib/pageBoot.js";
 
 // Super Admin is a separate lazily-loaded bundle - visitors never download it.
 const AdminApp = lazy(() => import("./admin/AdminApp.jsx"));
-const AdminShell = () => (
-  <Suspense fallback={<div style={{ padding: 40, fontFamily: "system-ui" }}>Loading admin…</div>}>
-    <AdminApp />
-  </Suspense>
-);
+const adminLoading = <div style={{ padding: 40, fontFamily: "system-ui" }}>Loading admin…</div>;
+// A link from the public site (menu, button) would otherwise open the admin in
+// the same page, where header/footer scripts that already ran keep running -
+// so that case reloads into a clean page. (After the reload the public site
+// has not rendered, so this can never loop.)
+function AdminShell() {
+  if (typeof window !== "undefined" && pageBoot.publicRendered) {
+    window.location.reload();
+    return adminLoading;
+  }
+  return (
+    <Suspense fallback={adminLoading}>
+      <AdminApp />
+    </Suspense>
+  );
+}
 
 // Shared by the browser entry (main.jsx) and the server renderer
 // (entry-server.jsx) so both always agree on the route table.

@@ -12,7 +12,7 @@ Nothing a visitor sees changes until someone with publish rights publishes.
   the draft by the admin window.
 - **Code keeps the defaults, the CMS stores overrides.** Page text, images and
   buttons fall back to what is in the code, so an empty CMS shows the original site.
-- **Documents:** `site` (header, footer, menus, banners, settings), `seo`
+- **Documents:** `site` (header, footer, menus, banners, settings, scripts), `seo`
   (defaults, redirects, robots, sitemap, schema, llms.txt, IndexNow), `forms`, and
   one `page:<id>` per page (`page:c-…` for pages created in the admin).
 - **Drafts vs live:** drafts in `DATA_DIR/content/drafts/`, everything live in ONE
@@ -53,6 +53,7 @@ cd ../backend && SITE_DIST=../frontend/dist PORT=5001 node server.js
 | `SITE_DIST` | unset | path to `frontend/dist` to also serve the website (SSR mode) |
 | `SERVE_SITE=1` | unset | shortcut: serve `../frontend/dist` if it exists |
 | `ALLOWED_ORIGINS` | – | extra CORS origins, comma separated (e.g. a staging domain) |
+| `SITE_FORM_ACTION` | – | Node site server only: extra `https://` origins (space separated) that forms on the site may post to, e.g. a newsletter form added under Header & footer scripts |
 | `KIBO_ADMIN_PASSWORD` | generated | fresh installs only: first Super Admin password. If unset, a random one is printed once in the server log. It must be changed at first sign-in (enforced by the API). |
 
 The backend trusts exactly one reverse proxy for the client IP (`X-Forwarded-For`,
@@ -117,13 +118,74 @@ Other causes of "Invalid email or password":
   release (an old sign-in left in the browser); fixed. If you see it, enter the
   password you are using now.
 
+## Header & footer scripts
+
+Website → **Header & Footer Scripts** (`/admin/site/code`) adds custom code to the
+public site: tag managers, pixels, chat widgets, custom CSS, structured data. Each
+snippet has:
+
+- **Where:** inside `<head>`, right after `<body>`, or just before `</body>`.
+  Within each position snippets run top to bottom.
+- **Show on:** all pages, or only the pages you tick.
+- **Needs cookie consent:** loads only after the visitor accepts cookies (and
+  makes the cookie banner appear). If consent is switched off under Website
+  Settings → Analytics, it loads for everyone.
+- **Also run on preview links:** off by default - only the live site runs it.
+- **On/Off:** new snippets start off. Switched-off snippets are never sent to
+  visitors.
+
+Snippets are part of the `site` document, so they follow Edit → Preview →
+Publish like everything else. How they run:
+
+- They are added in the browser after the page loads, never written into the
+  static/SSR HTML (that HTML also serves `/admin`). They never run in Super
+  Admin or in the visual editor.
+- `<script>` tags execute like code written into the page, also when nested
+  in other markup: an external script without `async` finishes loading before
+  the next part runs, and `document.write` output is inserted in place.
+  `<noscript>` parts are dropped (this code only runs with JavaScript on).
+  Code that waits for `DOMContentLoaded` or the window `load` event (already
+  over when snippets run) is called right after its script.
+- Page-limited snippets are removed when the visitor navigates away and run
+  again when they come back, like on a page load; anything a script already
+  started keeps running until a reload.
+- A statically built page first checks with the API that its content is
+  current. If a newer version exists, the new scripts run - never the old ones,
+  even if the new version can't be downloaded. If the API can't be reached at
+  all, the page's own (build-time) scripts run. Pages from the Node site server
+  are always current and don't wait.
+- Following a link from the public site into `/admin` always loads Super Admin
+  in a fresh page, so code that ran on the site never runs next to it.
+- Search engines that don't run JavaScript don't see these snippets. For site
+  verification use Website Settings → Search engine verification.
+- With the Node site server, forms may only post to the website itself. A
+  third-party form (newsletter, CRM) that posts to another site needs that
+  origin in `SITE_FORM_ACTION` (see Backend environment). JavaScript-based
+  embeds don't need it.
+
+**Who can change them:** the `site.code` permission ("Header & footer scripts").
+Only the Super Admin has it by default; give it only to people you trust with the
+whole website: a script runs with the website's own access, so it can read
+everything a visitor types and could misuse an admin session open in the same
+browser. Without `site.code`:
+
+- people still edit and publish the rest of the site settings, and their publish
+  keeps the live scripts as they are;
+- someone else's script draft stays a draft;
+- discard and restore leave scripts alone;
+- a schedule that doesn't change scripts uses whatever scripts are live when it
+  runs.
+
+Script edits appear in Change History (`content.scripts_edited`).
+
 ## Permissions
 
 Roles (Team Access → Roles & Permissions): Super Admin, Website Admin, Content
 Manager, SEO Manager, Marketing Manager, Viewer, plus custom roles. Editing and
 publishing are separate permissions for pages, SEO, site settings and forms; every
 API route checks them on the server, and every change is written to the audit log
-(Change History).
+(Change History). Header & footer scripts have their own permission (`site.code`),
+see above.
 
 ## Developer notes
 

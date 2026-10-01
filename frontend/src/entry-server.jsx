@@ -11,7 +11,7 @@ import { PAGES, BUILTIN_PATHS } from "./cms/pageMeta.js";
  * Used by the static prerender (build time) and by the Node site server
  * (request time). Returns { status, html, head, data, redirect }.
  */
-export async function render(url, { docs = {}, version = 0, mediaBase = "", mode = "live", previewInfo = null } = {}) {
+export async function render(url, { docs = {}, version = 0, mediaBase = "", mode = "live", previewInfo = null, fresh = false } = {}) {
   const u = new URL(url, "https://kibo360.in");
   if (mode === "live") {
     const r = matchRedirect(docs, u.pathname);
@@ -33,7 +33,9 @@ export async function render(url, { docs = {}, version = 0, mediaBase = "", mode
     </HeadCollectorContext.Provider>
   );
   if (collector.redirect) return { status: collector.redirect.type, redirect: collector.redirect };
-  const data = jsonForScript({ docs, version, mediaBase });
+  // fresh: rendered per request with the live content (Node site server), so
+  // the browser need not wait for a version check before running scripts
+  const data = jsonForScript(fresh ? { docs, version, mediaBase, fresh: true } : { docs, version, mediaBase });
   return { status: collector.status, html, head: collector.seo ? renderHeadHtml(collector.seo) : "", data, seo: collector.seo };
 }
 

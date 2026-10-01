@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
-import { applyPatch, diffPatch, docType, emptyPage, same } from "./docOps.js";
+import { applyPatch, diffPatch, docType, emptyPage, PATCHABLE, same } from "./docOps.js";
 
 // ---------------------------------------------------------------------------
 // Shared working copies of every content document (pages, site, seo, forms)
@@ -70,6 +70,9 @@ export function ContentStoreProvider({ children }) {
     const r = await api(`/api/admin/content/doc/${encodeURIComponent(docId)}`);
     savedRef.current = { ...savedRef.current, [docId]: structuredClone(r.data) };
     workingRef.current = { ...workingRef.current, [docId]: r.data };
+    // the next edit starts a new undo step: merging it into one from before
+    // the reload would make undo roll back what the reload brought in
+    for (const e of undoStack.current) if (e.docId === docId) e.coalesce = null;
     setState((s) => ({
       ...s,
       working: workingRef.current,
@@ -185,12 +188,28 @@ export function ContentStoreProvider({ children }) {
     }
     return null;
   };
+  /**
+   * Site, SEO and forms documents are made of independent sections. Undo/redo
+   * only puts back the sections that step changed, so a section reloaded in
+   * the meantime (e.g. scripts someone else published) is never rolled back -
+   * and never re-sent by someone who may not edit it.
+   */
+  const stepResult = (docId, target, other) => {
+    const t = docType(docId);
+    if (t === "page") return target;
+    const out = { ...(workingRef.current[docId] ?? emptyFor(docId)) };
+    for (const k of PATCHABLE[t] || []) {
+      if (same(target?.[k], other?.[k])) continue;
+      if (target?.[k] === undefined) delete out[k]; else out[k] = target[k];
+    }
+    return out;
+  };
   const canUndo = (docIds) => undoStack.current.some((e) => !docIds || docIds.includes(e.docId));
   const undo = useCallback((docIds) => {
     const e = takeLast(undoStack.current, Array.isArray(docIds) ? docIds : null);
     if (!e) return null;
     redoStack.current.push(e);
-    setWorking(e.docId, e.before);
+    setWorking(e.docId, stepResult(e.docId, e.before, e.after));
     schedule(e.docId, 400);
     syncHist();
     return e;
@@ -199,7 +218,7 @@ export function ContentStoreProvider({ children }) {
     const e = takeLast(redoStack.current, Array.isArray(docIds) ? docIds : null);
     if (!e) return null;
     undoStack.current.push(e);
-    setWorking(e.docId, e.after);
+    setWorking(e.docId, stepResult(e.docId, e.after, e.before));
     schedule(e.docId, 400);
     syncHist();
     return e;
@@ -238,10 +257,11 @@ export function ContentStoreProvider({ children }) {
       clearTimeout(timers.current.get(docId));
       timers.current.delete(docId);
       await inflight.current.get(docId);
-      await api(`/api/admin/content/doc/${encodeURIComponent(docId)}/discard`, { method: "POST" });
+      const r = await api(`/api/admin/content/doc/${encodeURIComponent(docId)}/discard`, { method: "POST" });
       dropHistory(docId);
       await reloadDoc(docId);
       await refreshStatus();
+      return r;
     } finally {
       discarding.current.delete(docId);
     }
@@ -249,9 +269,10 @@ export function ContentStoreProvider({ children }) {
 
   const restoreRevision = useCallback(async (docId, rev) => {
     await flush();
-    await api(`/api/admin/content/doc/${encodeURIComponent(docId)}/restore`, { method: "POST", body: { rev } });
+    const r = await api(`/api/admin/content/doc/${encodeURIComponent(docId)}/restore`, { method: "POST", body: { rev } });
     dropHistory(docId);
     await reloadDoc(docId);
+    return r;
   }, [flush, reloadDoc]);
 
   const createPage = useCallback(async (body) => {

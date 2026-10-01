@@ -88,6 +88,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       draftUpdatedAt: d?.updatedAt || null,
       draftUpdatedBy: d?.updatedBy || null,
       scheduled: sched.map((s) => ({ id: s.id, at: s.at })),
+      ...(docType(docId) === "site" ? { changed: dirty ? PATCHABLE.site.filter((k) => sectionDiffers(k, d.data, p?.data || emptyDoc(docId))) : [] } : {}),
       label: (d?.data || p?.data)?.meta?.label || null,
       slug: (d?.data || p?.data)?.meta?.slug || null,
     };
@@ -134,6 +135,33 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     if (docType(docId) === "site" && codeChanged(draftData, pubData) && !has("site.code")) return false;
     return true;
   }
+  /** `data` with the live scripts in place of its own. */
+  function withLiveCode(data, pubData) {
+    const out = { ...data };
+    if (pubData?.code === undefined) delete out.code; else out.code = structuredClone(pubData.code);
+    return out;
+  }
+  /**
+   * The part of a draft this person may publish. Without the scripts
+   * permission that is everything except the scripts: the live scripts stay
+   * as they are and a script draft stays a draft for someone who may publish
+   * it - so a pending script change never blocks the rest of the site.
+   */
+  function publishable(has, docId, draftData, pubData) {
+    if (docType(docId) !== "site" || has("site.code") || !codeChanged(draftData, pubData)) return draftData;
+    return withLiveCode(draftData, pubData);
+  }
+  /** What a schedule publishes for one doc when it runs (or is checked). */
+  /**
+   * Does a schedule publish the live scripts (not its own copy) for this doc?
+   * Yes when it didn't change them; schedules saved before scripts existed
+   * have no liveCode list and no scripts in their site snapshot.
+   */
+  const usesLiveCode = (s, id) => (Array.isArray(s.liveCode) ? s.liveCode.includes(id) : docType(id) === "site" && !("code" in (s.snapshot?.[id] || {})));
+  const scheduledData = (s, id, pubData) => (usesLiveCode(s, id) ? withLiveCode(s.snapshot?.[id], pubData) : s.snapshot?.[id]);
+  /** Does section `k` differ between two versions? (scripts: empty == none) */
+  const sectionDiffers = (k, a, b) => (k === "code" ? codeChanged(a, b) : !same(a?.[k], b?.[k]));
+  const ONLY_SCRIPTS = "Only header & footer script changes are waiting - someone with the scripts permission has to publish them";
 
   // --------------------------------------------------------------- publish
   function publishDocs(entries, { user, note = "", source = "publish" }) {
@@ -186,10 +214,11 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         if (permissionsOf && s.createdBy?.id && s.createdBy.id !== "system") {
           const perms = permissionsOf(s.createdBy.id);
           const pubNow = loadPublished();
-          const allowed = perms && s.docIds.every((id) => mayPublish((p) => perms.has(p), id, s.snapshot[id], pubNow.docs[id]?.data));
+          const allowed = perms && s.docIds.every((id) => mayPublish((p) => perms.has(p), id, scheduledData(s, id, pubNow.docs[id]?.data), pubNow.docs[id]?.data));
           if (!allowed) throw new ValidationError(`${s.createdBy.name || "The scheduler"} no longer has permission to publish this`);
         }
-        publishDocs(Object.entries(s.snapshot).map(([docId, data]) => ({ docId, data })), { user: s.createdBy, note: s.note || "Scheduled publish", source: "schedule" });
+        const pubAtRun = loadPublished();
+        publishDocs(Object.keys(s.snapshot).map((docId) => ({ docId, data: scheduledData(s, docId, pubAtRun.docs[docId]?.data) })), { user: s.createdBy, note: s.note || "Scheduled publish", source: "schedule" });
         s.status = "done";
         s.doneAt = new Date().toISOString();
         audit.log(null, { action: "content.schedule_published", target: s.docIds.join(", "), actor: s.createdBy });
@@ -313,6 +342,8 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
             if (fv === null) delete base[k][fk];
             else base[k][fk] = fv;
           }
+        } else if (patch[k] === null) {
+          delete base[k]; // the whole section goes back to its default (e.g. undo of its first edit)
         } else {
           base[k] = patch[k];
         }
@@ -349,7 +380,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       if (docId.startsWith("page:c-") && !pub.docs[docId]) return res.status(400).json({ ok: false, error: "This page has never been published - delete it instead" });
       const draft = loadDraft(docId);
       const pubData = pub.docs[docId]?.data;
-      const kept = draft ? lockedKeys(req, docId).filter((k) => !same(draft.data?.[k], pubData?.[k])) : [];
+      const kept = draft ? lockedKeys(req, docId).filter((k) => sectionDiffers(k, draft.data, pubData)) : [];
       if (kept.length) {
         const data = keepLocked(req, docId, structuredClone(pubData || emptyDoc(docId)), draft.data);
         saveDraft(docId, { data: normalizeDoc(docId, data), rev: (draft.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user) });
@@ -363,20 +394,29 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       if (!ids.length) return res.status(400).json({ ok: false, error: "Choose what to publish" });
       const pub = loadPublished();
       const entries = [];
+      const has = (p) => can(req, p);
+      const skipped = [];
       for (const docId of ids) {
         const d = loadDraft(docId);
-        const data = d?.data || pub.docs[docId]?.data;
-        if (!data) return res.status(400).json({ ok: false, error: `${docId} has nothing to publish` });
-        if (!mayPublish((p) => can(req, p), docId, data, pub.docs[docId]?.data)) {
-          return res.status(403).json({ ok: false, error: docId === "site" && codeChanged(data, pub.docs[docId]?.data) && !can(req, "site.code") ? "Publishing header/footer script changes needs the scripts permission" : `You don't have permission to publish ${docId}` });
+        const draftData = d?.data || pub.docs[docId]?.data;
+        if (!draftData) return res.status(400).json({ ok: false, error: `${docId} has nothing to publish` });
+        const data = publishable(has, docId, draftData, pub.docs[docId]?.data);
+        const partial = data !== draftData; // script changes stay a draft
+        if (partial && same(data, pub.docs[docId]?.data)) {
+          if (ids.length === 1) return res.status(400).json({ ok: false, error: ONLY_SCRIPTS });
+          skipped.push(docId);
+          continue;
         }
-        entries.push({ docId, data });
+        if (!mayPublish(has, docId, data, pub.docs[docId]?.data)) return res.status(403).json({ ok: false, error: `You don't have permission to publish ${docId}` });
+        entries.push({ docId, data, partial });
       }
-      const next = publishDocs(entries, { user: req.user, note: req.body?.note });
-      // Draft now matches live: clear it so "dirty" is exact.
-      for (const { docId } of entries) deleteDraft(docId);
+      if (!entries.length) return res.status(400).json({ ok: false, error: ONLY_SCRIPTS });
+      const next = publishDocs(entries.map(({ docId, data }) => ({ docId, data })), { user: req.user, note: req.body?.note });
+      // Draft now matches live: clear it so "dirty" is exact. (A draft whose
+      // script changes were left out stays - only the scripts differ now.)
+      for (const { docId, partial } of entries) if (!partial) deleteDraft(docId);
       audit.log(req, { action: "content.publish", target: ids.join(", "), details: { version: next.version, note: clampStr(req.body?.note, 200) } });
-      res.json({ ok: true, version: next.version, docs: ids.map((id) => docStatus(id, next)) });
+      res.json({ ok: true, version: next.version, docs: ids.map((id) => docStatus(id, next)), keptAsDraft: [...entries.filter((e) => e.partial).map((e) => e.docId), ...skipped] });
     }));
 
     app.post("/api/admin/content/unpublish", requireAuth(["pages.publish"]), handle((req, res) => {
@@ -409,10 +449,12 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       const r = loadRevisions(docId).find((x) => String(x.rev) === String(req.body?.rev));
       if (!r) return res.status(404).json({ ok: false, error: "Revision not found" });
       const prev = loadDraft(docId);
-      const restored = keepLocked(req, docId, structuredClone(r.data), workingData(docId, loadPublished()));
+      const current = workingData(docId, loadPublished());
+      const kept = lockedKeys(req, docId).filter((k) => sectionDiffers(k, r.data, current));
+      const restored = keepLocked(req, docId, structuredClone(r.data), current);
       saveDraft(docId, { data: normalizeDoc(docId, restored), rev: (prev?.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user), restoredFrom: r.rev });
-      audit.log(req, { action: "content.restore_to_draft", target: docId, details: { rev: r.rev } });
-      res.json({ ok: true, status: docStatus(docId) });
+      audit.log(req, { action: "content.restore_to_draft", target: docId, details: kept.length ? { rev: r.rev, kept } : { rev: r.rev } });
+      res.json({ ok: true, kept, status: docStatus(docId) });
     }));
 
     // ---- schedules ----------------------------------------------------------
@@ -427,13 +469,25 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       if (at > Date.now() + 366 * 86400_000) return res.status(400).json({ ok: false, error: "Schedules can be at most one year ahead" });
       const pub = loadPublished();
       const snapshot = {};
+      const liveCode = [];
+      const has = (p) => can(req, p);
       for (const docId of ids) {
-        const data = loadDraft(docId)?.data;
-        if (!data) return res.status(400).json({ ok: false, error: `${docId} has no draft changes to schedule` });
-        if (!mayPublish((p) => can(req, p), docId, data, pub.docs[docId]?.data)) return res.status(403).json({ ok: false, error: `You don't have permission to publish ${docId}` });
+        const draftData = loadDraft(docId)?.data;
+        if (!draftData) return res.status(400).json({ ok: false, error: `${docId} has no draft changes to schedule` });
+        const pubData = pub.docs[docId]?.data;
+        const data = publishable(has, docId, draftData, pubData);
+        if (data !== draftData && same(data, pubData)) {
+          if (ids.length === 1) return res.status(400).json({ ok: false, error: ONLY_SCRIPTS });
+          continue; // nothing of this one is theirs to schedule
+        }
+        if (!mayPublish(has, docId, data, pubData)) return res.status(403).json({ ok: false, error: `You don't have permission to publish ${docId}` });
         snapshot[docId] = normalizeDoc(docId, data, { strict: true });
+        // Not changing the scripts? Then publish whatever scripts are live
+        // when the schedule runs - never roll back a later script publish.
+        if (docType(docId) === "site" && !codeChanged(data, pubData)) liveCode.push(docId);
       }
-      const s = { id: newId("s_"), docIds: ids, at: new Date(at).toISOString(), snapshot, note: clampStr(req.body?.note, 200), status: "pending", createdAt: new Date().toISOString(), createdBy: who(req.user) };
+      if (!Object.keys(snapshot).length) return res.status(400).json({ ok: false, error: ONLY_SCRIPTS });
+      const s = { id: newId("s_"), docIds: Object.keys(snapshot), at: new Date(at).toISOString(), snapshot, liveCode, note: clampStr(req.body?.note, 200), status: "pending", createdAt: new Date().toISOString(), createdBy: who(req.user) };
       const list = loadSchedules();
       list.push(s);
       saveSchedules(list);
@@ -446,7 +500,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       const s = list.find((x) => x.id === req.params.id);
       if (!s || s.status !== "pending") return res.status(404).json({ ok: false, error: "Schedule not found" });
       const pub = loadPublished();
-      if (s.createdBy?.id !== req.user.id && !s.docIds.every((id) => mayPublish((p) => can(req, p), id, s.snapshot?.[id], pub.docs[id]?.data))) {
+      if (s.createdBy?.id !== req.user.id && !s.docIds.every((id) => mayPublish((p) => can(req, p), id, scheduledData(s, id, pub.docs[id]?.data), pub.docs[id]?.data))) {
         return res.status(403).json({ ok: false, error: "You can only cancel schedules for content you may publish" });
       }
       s.status = "cancelled";
@@ -457,10 +511,10 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     });
 
     // ---- preview links --------------------------------------------------------
-    app.get("/api/admin/content/previews", requireAuth("pages.view"), (_req, res) => {
+    const PREVIEW_PERMS = ["pages.edit", "pages.publish", "seo.edit", "seo.publish", "site.edit", "site.publish", "site.code", "forms.edit", "forms.publish"];
+    app.get("/api/admin/content/previews", requireAuth(["pages.view", ...PREVIEW_PERMS]), (_req, res) => {
       res.json({ ok: true, previews: loadPreviews().map(({ tokenHash, ...p }) => p).reverse() });
     });
-    const PREVIEW_PERMS = ["pages.edit", "pages.publish", "seo.edit", "seo.publish", "site.edit", "site.publish", "forms.edit", "forms.publish"];
     app.post("/api/admin/content/previews", requireAuth(PREVIEW_PERMS), (req, res) => {
       const hours = Math.min(24 * 30, Math.max(1, Number(req.body?.hours) || 72));
       const token = randomToken(32);

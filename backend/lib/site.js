@@ -44,11 +44,16 @@ export async function createSite({ siteDist, content }) {
 
   const shell = template.replace("<!--kibo-head-->", '<meta name="robots" content="noindex, nofollow" />').replace("<!--kibo-data-->", "");
 
+  // Forms may only post to this site, plus the https origins listed in
+  // SITE_FORM_ACTION (e.g. a newsletter form added under Header & footer
+  // scripts): SITE_FORM_ACTION="https://example.list-manage.com https://forms.example.com"
+  const formAction = ["'self'", ...String(process.env.SITE_FORM_ACTION || "").split(/\s+/).filter((s) => /^https:\/\/[a-z0-9*.-]+(:\d+)?$/i.test(s))].join(" ");
+
   function siteHeaders(req, res) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'");
+    res.setHeader("Content-Security-Policy", `frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action ${formAction}`);
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
     if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
@@ -126,7 +131,7 @@ export async function createSite({ siteDist, content }) {
         const key = `${p.version}:${req.path}`;
         let hit = cache.get(key);
         if (!hit) {
-          const r = await ssr.render(req.path, { docs: p.docs, version: p.version, mediaBase: "" });
+          const r = await ssr.render(req.path, { docs: p.docs, version: p.version, mediaBase: "", fresh: true });
           if (r.redirect) {
             hit = r.redirect.type === 410 ? { status: 410, html: null } : { status: [301, 302, 307, 308].includes(r.redirect.type) ? r.redirect.type : 301, location: r.redirect.to };
           } else {
@@ -137,7 +142,7 @@ export async function createSite({ siteDist, content }) {
         }
         if (hit.location) return res.redirect(hit.status, hit.location);
         if (hit.status === 410) {
-          const nf = await ssr.render("/__kibo-not-found__", { docs: p.docs, version: p.version });
+          const nf = await ssr.render("/__kibo-not-found__", { docs: p.docs, version: p.version, fresh: true });
           return res.status(410).type("html").send(inject(nf, "/404"));
         }
         res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");

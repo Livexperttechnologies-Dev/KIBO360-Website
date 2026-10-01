@@ -5,14 +5,15 @@ import { sanitizeHtml } from "../../cms/sanitize.js";
 import { useAuth } from "../AdminApp.jsx";
 import { useContent } from "../store.jsx";
 import { mediaUrl } from "../api.js";
-import { Alert, Badge, Button, Card, Check, Empty, ErrorBox, Field, I, IconButton, Input, PageHead, Select, Spinner, Textarea, Toggle, useConfirm } from "../ui.jsx";
-import { imageValue, siteSection } from "../docOps.js";
+import { Alert, Badge, Button, Card, Check, Counter, Empty, ErrorBox, Field, I, IconButton, Input, PageHead, Select, Spinner, Textarea, Toggle, useConfirm } from "../ui.jsx";
+import { imageValue, same, siteSection } from "../docOps.js";
 import DocBar from "../DocBar.jsx";
 import { MediaPicker } from "./Media.jsx";
 
 // ---------------------------------------------------------------------------
-// Website: header & footer, menus, announcement banners, site settings.
-// All of it lives in the "site" document (draft -> publish like pages).
+// Website: header & footer, menus, announcement banners, site settings and
+// header/footer scripts. All of it lives in the "site" document (draft ->
+// publish like pages). Scripts need their own permission ("site.code").
 // ---------------------------------------------------------------------------
 
 const TABS = [
@@ -20,6 +21,7 @@ const TABS = [
   { id: "menus", label: "Menus", icon: "menu" },
   { id: "banners", label: "Banners", icon: "megaphone" },
   { id: "settings", label: "Website Settings", icon: "settings" },
+  { id: "code", label: "Scripts & Code", icon: "code" },
 ];
 const mid = (p = "mi") => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -30,12 +32,20 @@ export default function Site() {
   if (!store?.loaded) return <div className="a-page"><Spinner /></div>;
   if (store.error) return <div className="a-page"><ErrorBox error={store.error} onRetry={store.load} /></div>;
   const ro = !can("site.edit");
+  const roCode = !can("site.code");
   const site = store.working.site || {};
-  const set = (section, value, label) => { if (!ro) store.update("site", (d) => ({ ...(d || {}), [section]: value }), { label, coalesce: `site|${section}` }); };
+  const set = (section, value, label) => {
+    if (section === "code" ? roCode : ro) return;
+    store.update("site", (d) => ({ ...(d || {}), [section]: value }), { label, coalesce: `site|${section}` });
+  };
   const t = TABS.find((x) => x.id === tab) || TABS[0];
   return (
     <div className="a-page">
-      <PageHead title={t.label} subtitle="Site-wide elements shown on every page. Changes are drafts until published." actions={<Link className="a-btn" to="/admin/editor?path=/"><I n="eye" size={15} /> See it on the page</Link>} />
+      <PageHead
+        title={t.label}
+        subtitle={tab === "code" ? "Code added to the live website - tags, pixels, chat widgets, custom CSS. Drafts until published." : "Site-wide elements shown on every page. Changes are drafts until published."}
+        actions={tab !== "code" && <Link className="a-btn" to="/admin/editor?path=/"><I n="eye" size={15} /> See it on the page</Link>}
+      />
       <div className="a-tabs">
         {TABS.map((x) => <NavLink key={x.id} to={`/admin/site/${x.id}`} className={({ isActive }) => `a-tab ${isActive ? "active" : ""}`}><I n={x.icon} size={15} />{x.label}</NavLink>)}
       </div>
@@ -44,6 +54,7 @@ export default function Site() {
       {tab === "menus" && <Menus site={site} set={set} ro={ro} />}
       {tab === "banners" && <Banners site={site} set={set} ro={ro} />}
       {tab === "settings" && <Settings site={site} set={set} ro={ro} />}
+      {tab === "code" && <Scripts site={site} published={store.published.site} set={set} ro={roCode} />}
     </div>
   );
 }
@@ -89,6 +100,29 @@ export function ButtonFields({ value, onChange, disabled, pages }) {
         </Field>
       )}
       {b.action === "link" && <Check checked={b.newTab} disabled={disabled} onChange={(v) => set({ newTab: v || undefined })} label="Open in a new tab" />}
+    </div>
+  );
+}
+
+/**
+ * Tick the pages something is shown on. Paths that no longer match a page
+ * (renamed or deleted) stay listed so they can be unticked, and a warning
+ * shows when none of the ticked paths is a real page.
+ */
+function PagePicker({ value, pages, disabled, onChange, nowhere }) {
+  const list = value || [];
+  const known = new Set(pages.map((p) => p.path));
+  const missing = list.filter((p) => p !== "*" && !known.has(p));
+  const toggle = (path, on) => onChange(on ? [...list, path] : list.filter((x) => x !== path));
+  return (
+    <div className="a-row">
+      {!list.some((p) => known.has(p)) && (
+        <span className="a-small" style={{ color: "var(--a-amber)" }}>
+          {missing.length ? `The ticked page${missing.length === 1 ? " no longer exists" : "s no longer exist"} - pick a page, ${nowhere}.` : `Pick at least one page - ${nowhere}.`}
+        </span>
+      )}
+      {pages.map((p) => <Check key={p.path} checked={list.includes(p.path)} disabled={disabled} onChange={(v) => toggle(p.path, v)} label={p.label} />)}
+      {missing.map((path) => <Check key={path} checked disabled={disabled} onChange={(v) => toggle(path, v)} label={`${path} (page not found)`} />)}
     </div>
   );
 }
@@ -249,12 +283,7 @@ function Banners({ site, set, ro }) {
                   <ButtonFields value={b.link || { t: "btn", label: "", action: "link", href: "" }} disabled={ro} pages={pages} onChange={(v) => upd(b.id, { link: v })} />
                   <div className="a-section-title">Show on</div>
                   <Check checked={all} disabled={ro} onChange={(v) => upd(b.id, { pages: v ? ["*"] : [] })} label="All pages" />
-                  {!all && (
-                    <div className="a-row">
-                      {!b.pages?.length && <span className="a-small" style={{ color: "var(--a-amber)" }}>Pick at least one page - otherwise the banner is not shown anywhere.</span>}
-                      {pages.map((p) => <Check key={p.path} checked={b.pages?.includes(p.path)} disabled={ro} onChange={(v) => upd(b.id, { pages: v ? [...(b.pages || []), p.path] : (b.pages || []).filter((x) => x !== p.path) })} label={p.label} />)}
-                    </div>
-                  )}
+                  {!all && <PagePicker value={b.pages} pages={pages} disabled={ro} onChange={(v) => upd(b.id, { pages: v })} nowhere="otherwise the banner is not shown anywhere" />}
                 </div>
               </div>
             );
@@ -350,6 +379,191 @@ function Settings({ site, set, ro }) {
         </div>
       </Card>
       {ro && <Alert tone="warn">View only - you need the Website edit permission to change these settings.</Alert>}
+    </div>
+  );
+}
+
+// --------------------------------------------------------- scripts & code
+const MAX_SNIPPETS = 30;
+const MAX_CODE = 50000;
+const LOCATIONS = [
+  { value: "head", label: "Header - inside <head>" },
+  { value: "bodyStart", label: "Body start - right after <body>" },
+  { value: "bodyEnd", label: "Footer - just before </body>" },
+];
+const locLabel = (v) => ({ head: "Header", bodyStart: "Body start", bodyEnd: "Footer" }[v] || "Header");
+const VISIBLE_TAGS = new Set(["div", "iframe", "img", "p", "span", "a", "button", "section", "form", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table", "video", "audio", "canvas", "svg"]);
+const JS_TYPE = /^(?:(?:text|application)\/(?:x-)?(?:java|ecma)script)?$/i;
+const WRAP = {
+  script: (c) => `<script>\n${c}\n</script>`,
+  jsonld: (c) => `<script type="application/ld+json">\n${c}\n</script>`,
+  style: (c) => `<style>\n${c}\n</style>`,
+};
+const WRAP_LABEL = { script: "<script>", jsonld: "<script type=\"application/ld+json\">", style: "<style>" };
+const TRACKING = /googletagmanager|gtag\(|fbq\(|clarity\.ms|hotjar|snap\.licdn|analytics|pixel|doubleclick|tiktok|bat\.bing/i;
+
+/**
+ * Friendly checks for pasted code. Nothing here blocks saving - the code is
+ * the author's responsibility - but common mistakes are pointed out early.
+ * Scripts are only compiled (new Function) to find syntax errors, never run.
+ */
+export function lintSnippet(s, { requireConsent = true } = {}) {
+  const out = [];
+  const code = s.code || "";
+  if (!code.trim()) return [{ tone: "info", text: "Empty - nothing is added to the website until you paste code here." }];
+  let frag = null;
+  try {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = code; // inert: nothing in a template runs or loads
+    frag = tpl.content;
+  } catch { /* very old browser */ }
+  // Markup = what the HTML parser turns into tags or comments (so JavaScript
+  // like "i<items.length" without tags is still recognised as such).
+  const hasMarkup = frag ? [...frag.childNodes].some((n) => n.nodeType === 1 || n.nodeType === 8) : /<[a-z!/]/i.test(code);
+  if (!hasMarkup) {
+    // no tags at all: work out what was pasted and offer the right wrapper
+    const raw = code.trim();
+    if (/^(?:G|GTM|AW|UA|DC)-[A-Z0-9-]+$/i.test(raw) || /^\d{5,}$/.test(raw) || /^[\w.-]+=[\w.-]+$/.test(raw)) {
+      return [{ tone: "warn", text: "This looks like an ID, not code. Use the ready-made fields under Website Settings (Analytics, or Search engine verification), or paste the provider's full snippet including its <script> tags." }];
+    }
+    let kind = null;
+    try { JSON.parse(raw); kind = "jsonld"; } catch { /* not JSON */ }
+    if (!kind && /^(?:[^{};]+\{(?:\s*[-a-z]+\s*:\s*[^{};]+;?)*\s*\}\s*)+$/i.test(raw)) kind = "style";
+    if (!kind) { try { new Function(raw); kind = "script"; } catch { /* not JavaScript either */ } } // eslint-disable-line no-new-func
+    if (!kind) return [{ tone: "info", text: s.location === "head" ? "Plain text in the header is ignored - paste HTML or code with its tags." : "This is plain text - visitors see it as it is." }];
+    const where = s.location === "head" ? "in the header it would be ignored" : "visitors would see it as text";
+    const what = { script: "plain JavaScript", jsonld: "structured data (JSON)", style: "CSS" }[kind];
+    out.push({ tone: "warn", text: `This looks like ${what} without ${WRAP_LABEL[kind]} tags - ${where}.`, fix: kind });
+    return out;
+  }
+  // Script bodies may contain "<script" inside strings, and comments may
+  // mention it - skip complete blocks the way the HTML parser does (earliest
+  // match wins), then look for leftovers.
+  const rest = code.replace(/<!--[\s\S]*?(?:-->|$)|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "");
+  if (/<script\b/i.test(rest)) out.push({ tone: "error", text: "A <script> tag is missing its closing </script>." });
+  else if (/<\/script\s*>/i.test(rest)) out.push({ tone: "error", text: "There is a </script> without a matching <script> tag." });
+  if (frag?.querySelector("noscript")) out.push({ tone: "info", text: "<noscript> parts are left out: they are only for browsers without JavaScript, and this code only runs with JavaScript." });
+  if (frag) {
+    const scripts = [...frag.querySelectorAll("script")];
+    scripts.forEach((el, i) => {
+      const type = (el.getAttribute("type") || "").trim();
+      const label = scripts.length > 1 ? `Script ${i + 1}` : "The script";
+      if (/^application\/(ld\+)?json$/i.test(type)) {
+        try { JSON.parse(el.textContent); } catch (e) { out.push({ tone: "error", text: `${label} is not valid JSON: ${e.message}` }); }
+      } else if (JS_TYPE.test(type) && !el.hasAttribute("src") && el.textContent.trim()) {
+        try { new Function(el.textContent); } catch (e) { // eslint-disable-line no-new-func
+          if (e instanceof SyntaxError) out.push({ tone: "error", text: `${label} has a JavaScript error: ${e.message}` });
+        }
+      }
+      if (/^http:\/\//i.test(el.getAttribute("src") || "")) out.push({ tone: "warn", text: `${label} loads over http:// - browsers block that on an https website. Use https://.` });
+    });
+    const top = [...frag.children].map((el) => el.localName);
+    if (s.location === "head" && top.some((t) => VISIBLE_TAGS.has(t))) out.push({ tone: "warn", text: "Visible elements (like <div> or <iframe>) can't be shown from the header. Choose Body start or Footer for them." });
+    if (s.location !== "head" && top.some((t) => t === "meta" || t === "title" || t === "base")) out.push({ tone: "warn", text: "<meta>, <title> and <base> tags only work in the header (<head>)." });
+    if (s.location === "head" && top.includes("title")) out.push({ tone: "warn", text: "Page titles are set under SEO Management - a <title> here is replaced on every page." });
+    const external = [...frag.querySelectorAll("form[action]")].some((f) => { try { return new URL(f.getAttribute("action"), window.location.href).origin !== window.location.origin; } catch { return false; } });
+    if (external) out.push({ tone: "info", text: "This form sends its data to another website. If the website runs on the Node site server, that address must be added to its SITE_FORM_ACTION setting - ask your developer." });
+  }
+  if (/document\.write/.test(code)) out.push({ tone: "info", text: "Uses document.write - its output is inserted where the script is, after the page has loaded." });
+  if (requireConsent && s.consent !== "analytics" && TRACKING.test(code)) out.push({ tone: "warn", text: "This looks like tracking or marketing code. Turn on “Needs cookie consent” so it only loads after the visitor accepts cookies." });
+  return out;
+}
+
+function Scripts({ site, published, set, ro }) {
+  const pages = usePages();
+  const confirm = useConfirm();
+  const list = Array.isArray(site.code?.snippets) ? site.code.snippets : [];
+  const live = new Map((Array.isArray(published?.code?.snippets) ? published.code.snippets : []).map((s) => [s.id, s]));
+  const requireConsent = siteSection(site, "settings").analytics?.requireConsent !== false;
+  // no snippets left = no "code" section at all (the server stores it that way too)
+  const up = (next, label = "Edit scripts") => set("code", next.length ? { snippets: next } : undefined, label);
+  const upd = (id, patch) => up(list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const move = (i, d) => { const n = [...list]; const j = i + d; if (j < 0 || j >= n.length) return; [n[i], n[j]] = [n[j], n[i]]; up(n, "Reorder scripts"); };
+  const add = (location) => up([...list, { id: mid("sn"), name: `${locLabel(location)} code`, location, code: "", enabled: false, pages: ["*"], consent: "none", preview: false }], "Add script");
+  const status = (s) => {
+    const p = live.get(s.id);
+    if (!s.enabled) return p?.enabled ? <Badge tone="amber" title="Turned off in the draft - still running on the live site until you publish">off · live until published</Badge> : <Badge tone="gray">off</Badge>;
+    if (p?.enabled && same(p, s)) return <Badge tone="green">live</Badge>;
+    return <Badge tone="blue" title="Goes live when the website changes are published">{p?.enabled ? "changed · publish to update" : "publish to go live"}</Badge>;
+  };
+  return (
+    <div className="a-stack">
+      <Alert tone="info">
+        Code here is added to the <strong>live website</strong> after you publish - on every page, or only the pages you choose. It never runs inside Super Admin or the visual editor. To try it first, turn on “Also run on preview links” and use <strong>Preview</strong> above.
+        {" "}Within each position, code runs from top to bottom.
+      </Alert>
+      {ro && <Alert tone="warn">View only - adding or changing code needs the “Header &amp; footer scripts” permission. Ask a Super Admin.</Alert>}
+      <Card
+        title="Header & footer scripts"
+        subtitle="Tags, pixels, chat widgets, custom CSS or structured data. Google Analytics, Tag Manager, Clarity, Meta Pixel and LinkedIn also have ready-made fields under Website Settings."
+        actions={!ro && (
+          <div className="a-row nowrap">
+            {LOCATIONS.map((l) => <Button key={l.value} size="sm" icon="plus" disabled={list.length >= MAX_SNIPPETS} onClick={() => add(l.value)}>{locLabel(l.value)}</Button>)}
+          </div>
+        )}
+      >
+        {!list.length && <Empty icon="code" title="No custom code yet" text="Add code for the header (<head>), the start of the page body, or the footer (before </body>)." />}
+        {list.length >= MAX_SNIPPETS && <Alert tone="warn">This is the limit of {MAX_SNIPPETS} snippets - combine some of them to add more.</Alert>}
+        <div className="a-stack">
+          {list.map((s, i) => {
+            const all = (s.pages ?? ["*"]).includes("*");
+            const issues = lintSnippet(s, { requireConsent });
+            return (
+              <div key={s.id} className={`a-rowcard ${s.enabled ? "" : "muted"}`} data-snippet={s.id}>
+                <div className="a-rowcard-head" style={{ flexWrap: "wrap" }}>
+                  <Toggle checked={s.enabled} disabled={ro} onChange={(v) => upd(s.id, { enabled: v })} label={s.enabled ? "On" : "Off"} />
+                  <Input className="a-grow" style={{ flex: "1 1 180px" }} value={s.name} disabled={ro} maxLength={80} aria-label="Name" placeholder="Name, e.g. Chat widget" onChange={(v) => upd(s.id, { name: v })} />
+                  {status(s)}
+                  <IconButton icon="up" label="Move up" disabled={ro || i === 0} onClick={() => move(i, -1)} />
+                  <IconButton icon="down" label="Move down" disabled={ro || i === list.length - 1} onClick={() => move(i, 1)} />
+                  {!ro && <IconButton icon="trash" className="danger" label="Delete" onClick={async () => { if (await confirm({ title: `Delete “${s.name}”?`, message: live.get(s.id)?.enabled ? "It keeps running on the live website until you publish." : undefined, danger: true, confirmLabel: "Delete" })) up(list.filter((x) => x.id !== s.id), "Delete script"); }} />}
+                </div>
+                <div className="a-rowcard-body">
+                  <div className="a-grid-2">
+                    <Field label="Where on the page"><Select value={s.location} disabled={ro} options={LOCATIONS} onChange={(v) => upd(s.id, { location: v })} /></Field>
+                    <Field label="Show on">
+                      <Check checked={all} disabled={ro} onChange={(v) => upd(s.id, { pages: v ? ["*"] : [] })} label="All pages" />
+                    </Field>
+                  </div>
+                  {!all && <PagePicker value={s.pages} pages={pages} disabled={ro} onChange={(v) => upd(s.id, { pages: v })} nowhere="otherwise this code runs nowhere" />}
+                  <Field label="Code" counter={<Counter value={s.code} max={MAX_CODE} />} hint="Paste the snippet exactly as the provider gives it, including the <script> tags.">
+                    <textarea
+                      className="a-code"
+                      spellCheck={false}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      rows={8}
+                      maxLength={MAX_CODE}
+                      disabled={ro}
+                      aria-label={`Code for ${s.name}`}
+                      placeholder={s.location === "head" ? '<script async src="https://example.com/tag.js"></script>' : s.location === "bodyStart" ? '<div class="top-notice">…</div>' : "<script>\n  // runs at the end of the page\n</script>"}
+                      value={s.code}
+                      onChange={(e) => upd(s.id, { code: e.target.value })}
+                    />
+                  </Field>
+                  {issues.map((x, k) => (
+                    <Alert key={k} tone={x.tone}>
+                      {x.text}
+                      {x.fix && !ro && <> <Button size="sm" onClick={() => upd(s.id, { code: WRAP[x.fix](s.code.trim()) })}>Wrap in {WRAP_LABEL[x.fix]} tags</Button></>}
+                    </Alert>
+                  ))}
+                  <div className="a-grid-2">
+                    <Toggle checked={s.consent === "analytics"} disabled={ro} onChange={(v) => upd(s.id, { consent: v ? "analytics" : "none" })} label="Needs cookie consent" hint={requireConsent ? "Loads only after the visitor accepts cookies (for tracking & marketing code)." : "Consent is switched off under Website Settings → Analytics, so this loads for everyone."} />
+                    <Toggle checked={!!s.preview} disabled={ro} onChange={(v) => upd(s.id, { preview: v })} label="Also run on preview links" hint="Off: only the live website runs it." />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+      <Card title="Good to know">
+        <ul className="a-small a-muted" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, listStyle: "disc" }}>
+          <li>Code is added after the page loads. Search engines that don&apos;t run JavaScript won&apos;t see it - for site verification use Website Settings → Search engine verification.</li>
+          <li>Code limited to some pages is removed when the visitor moves to another page and runs again each time they come back, like on a fresh page load. Anything it already started (for example a chat widget) keeps running until the page is reloaded.</li>
+          <li>Only add code from sources you trust: it can read and change everything on the website, including what visitors type into forms.</li>
+        </ul>
+      </Card>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "./AdminApp.jsx";
 import { useContent, saveLabel } from "./store.jsx";
 import { Badge, Button, I, timeAgo, useConfirm, useNow, useToast } from "./ui.jsx";
-import { describeChanges } from "./docOps.js";
+import { describeChanges, discardedMessage } from "./docOps.js";
 import { PublishDialog, PreviewDialog, docLabel } from "./editor/panels.jsx";
 
 /**
@@ -19,8 +19,11 @@ export default function DocBar({ docIds, previewPath = "/", note }) {
   useNow(10000);
   if (!store?.loaded) return null;
   const dirty = docIds.filter((id) => store.isDirty(id));
-  const editPerm = (id) => (id.startsWith("page:") ? "pages.edit" : { site: "site.edit", seo: "seo.edit", forms: "forms.edit" }[id]);
-  const discardable = dirty.filter((id) => can(editPerm(id)));
+  const editPerm = (id) => (id.startsWith("page:") ? "pages.edit" : { site: ["site.edit", "site.code"], seo: "seo.edit", forms: "forms.edit" }[id]);
+  // Only offer Discard when some of the changes are this person's to drop
+  // (e.g. not when the only change is a script and they can't edit scripts).
+  const mayDiscard = (id) => can(editPerm(id)) && (id !== "site" || describeChanges(id, store.published[id] || {}, store.working[id] || {}).some((c) => can(c.kind === "code" ? "site.code" : "site.edit")));
+  const discardable = dirty.filter(mayDiscard);
   const changes = dirty.reduce((n, id) => n + describeChanges(id, store.published[id] || {}, store.working[id] || {}).length, 0);
   const canPublish = can(["site.publish", "seo.publish", "forms.publish", "pages.publish"]);
   const st = store.status[docIds[0]];
@@ -40,7 +43,11 @@ export default function DocBar({ docIds, previewPath = "/", note }) {
         <Button size="sm" variant="danger" onClick={async () => {
           const ok = await confirm({ title: "Discard unpublished changes?", message: `This throws away the draft of ${discardable.map((id) => docLabel(id, store)).join(" and ")} and goes back to the live version.`, confirmLabel: "Discard", danger: true });
           if (!ok) return;
-          try { for (const id of discardable) await store.discard(id); toast("Draft discarded"); } catch (e) { toast(e.message, { tone: "error" }); }
+          try {
+            const kept = new Set();
+            for (const id of discardable) for (const k of (await store.discard(id))?.kept || []) kept.add(k);
+            toast(discardedMessage([...kept]), kept.size ? { duration: 7000 } : undefined);
+          } catch (e) { toast(e.message, { tone: "error" }); }
         }}>Discard</Button>
       )}
       {canPublish && <Button size="sm" variant="primary" icon="send" disabled={!dirty.length} onClick={async () => { await store.flush(); setDialog("publish"); }}>Publish</Button>}

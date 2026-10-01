@@ -344,7 +344,7 @@ export function normSite(data) {
     };
     const logo = normImage(f.logo); if (logo) out.footer.logo = logo;
   }
-  if (isObj(d.code)) out.code = normCode(d.code);
+  if (isObj(d.code)) { const code = normCode(d.code); if (code.snippets.length) out.code = code; }
   if (Array.isArray(d.banners)) {
     out.banners = d.banners.slice(0, 10).filter(isObj).map((b) => {
       const nb = {

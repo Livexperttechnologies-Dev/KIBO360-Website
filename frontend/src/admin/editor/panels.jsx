@@ -4,8 +4,8 @@ import { BLOCKS } from "../../cms/blocks.jsx";
 import { BUILTIN_PATHS } from "../../cms/pageMeta.js";
 import { api } from "../api.js";
 import { useAuth } from "../AdminApp.jsx";
-import { Alert, Badge, Button, Check, CopyButton, Empty, Field, I, IconButton, Input, Modal, Select, Spinner, Tabs, fmtDate, timeAgo, useConfirm, useLoad, useToast } from "../ui.jsx";
-import { describeChanges, docType, keyLabel, same, valueText } from "../docOps.js";
+import { Alert, Badge, Button, Check, CopyButton, Empty, Field, I, IconButton, Input, Modal, Select, Spinner, Tabs, fmtDate, useConfirm, useLoad, useToast } from "../ui.jsx";
+import { describeChanges, discardedMessage, docType, keyLabel, same, valueText } from "../docOps.js";
 
 // ---------------------------------------------------------------------------
 // Editor side panels and dialogs.
@@ -104,6 +104,16 @@ export function BlockLibrary({ onPick, onClose }) {
 }
 
 // --------------------------------------------------------------- publish
+/**
+ * Header/footer script changes in the site draft that this person can't
+ * publish. They are left out of their publish (the live scripts stay) and
+ * remain a draft for someone with the scripts permission.
+ */
+function scriptsLeftOut(docId, store, can) {
+  if (docId !== "site" || can("site.code")) return false;
+  const changed = store.status.site?.changed; // the server's (normalised) view
+  return Array.isArray(changed) ? changed.includes("code") : !same(store.published.site?.code?.snippets || [], store.working.site?.code?.snippets || []);
+}
 function publishAllowed(docId, store, can) {
   const t = docType(docId);
   if (t === "page") {
@@ -111,8 +121,13 @@ function publishAllowed(docId, store, can) {
     const ch = describeChanges(docId, store.published[docId] || {}, store.working[docId] || {});
     return ch.length > 0 && ch.every((c) => c.kind === "seo") && can("seo.publish");
   }
-  if (t === "site" && !same(store.published.site?.code?.snippets || [], store.working.site?.code?.snippets || []) && !can("site.code")) return false;
-  return can({ site: "site.publish", seo: "seo.publish", forms: "forms.publish" }[t]);
+  if (!can({ site: "site.publish", seo: "seo.publish", forms: "forms.publish" }[t])) return false;
+  // nothing left to publish once the script changes are left out?
+  if (scriptsLeftOut(docId, store, can)) {
+    const changed = store.status.site?.changed;
+    return (Array.isArray(changed) ? changed : describeChanges(docId, store.published[docId] || {}, store.working[docId] || {}).map((c) => c.kind)).some((k) => k !== "code");
+  }
+  return true;
 }
 
 export function PublishDialog({ ctx, onClose, docIds: only = null }) {
@@ -129,6 +144,7 @@ export function PublishDialog({ ctx, onClose, docIds: only = null }) {
       label: docLabel(id, store),
       changes: describeChanges(id, store.published[id] || {}, store.working[id] || {}).length,
       allowed: publishAllowed(id, store, can),
+      scriptsLeftOut: scriptsLeftOut(id, store, can),
       current: id === ctx.pageDocId,
     }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,7 +200,8 @@ export function PublishDialog({ ctx, onClose, docIds: only = null }) {
                   <span className="a-grow" />
                   <span className="a-small a-muted">{c.changes} change{c.changes === 1 ? "" : "s"}</span>
                 </div>
-                {!c.allowed && <p className="a-hint">You don&apos;t have permission to publish this - ask a publisher.</p>}
+                {!c.allowed && <p className="a-hint">{c.scriptsLeftOut && can("site.publish") ? "Only header & footer script changes are waiting - someone with the scripts permission has to publish them." : "You don't have permission to publish this - ask a publisher."}</p>}
+                {c.allowed && c.scriptsLeftOut && <p className="a-hint">Header &amp; footer script changes are not included - the live scripts stay as they are and the changes stay a draft for someone with the scripts permission.</p>}
               </div>
             ))}
           </div>
@@ -243,7 +260,7 @@ export function HistoryDialog({ docIds, label, onClose, onView }) {
 }
 
 // --------------------------------------------------------------- preview
-const PREVIEW_PERMS = ["pages.edit", "pages.publish", "seo.edit", "seo.publish", "site.edit", "site.publish", "forms.edit", "forms.publish"];
+const PREVIEW_PERMS = ["pages.edit", "pages.publish", "seo.edit", "seo.publish", "site.edit", "site.publish", "site.code", "forms.edit", "forms.publish"];
 
 export function PreviewDialog({ path, label, onClose }) {
   const toast = useToast();
@@ -297,7 +314,7 @@ export function PreviewDialog({ path, label, onClose }) {
           <div className="a-list">
             {list.map((p) => (
               <div key={p.id} className="a-list-row">
-                <div className="a-grow"><strong>{p.label}</strong> <span className="a-muted a-small">by {p.createdBy?.name} · expires {timeAgo(p.exp).replace(" ago", "")}</span></div>
+                <div className="a-grow"><strong>{p.label}</strong> <span className="a-muted a-small">by {p.createdBy?.name} · expires {fmtDate(p.exp)}</span></div>
                 {canRevoke(p) && <Button size="sm" variant="danger" onClick={() => revoke(p.id)}>Revoke</Button>}
               </div>
             ))}
@@ -333,11 +350,14 @@ export function ChangesList({ ctx, docIds }) {
                 )}
               </div>
             ))}
-            {changes.length > 0 && (id === "site" ? ctx.can("site.edit") : ctx.can("pages.edit")) && (id !== ctx.pageDocId || store.published[id] || !id.startsWith("page:c-")) && (
+            {changes.length > 0 && (id === "site" ? changes.some((c) => ctx.can(c.kind === "code" ? "site.code" : "site.edit")) : ctx.can("pages.edit")) && (id !== ctx.pageDocId || store.published[id] || !id.startsWith("page:c-")) && (
               <Button size="sm" variant="danger" icon="trash" onClick={async () => {
                 const ok = await confirm({ title: "Discard draft changes?", message: `All unpublished changes to “${docLabel(id, store)}” are thrown away and it goes back to the live version. This cannot be undone.`, confirmLabel: "Discard changes", danger: true });
                 if (!ok) return;
-                try { await store.discard(id); toast("Draft discarded"); } catch (e) { toast(e.message, { tone: "error" }); }
+                try {
+                  const kept = (await store.discard(id))?.kept || [];
+                  toast(discardedMessage(kept), kept.length ? { duration: 7000 } : undefined);
+                } catch (e) { toast(e.message, { tone: "error" }); }
               }}>Discard these changes</Button>
             )}
           </div>

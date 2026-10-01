@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { useAuth } from "../AdminApp.jsx";
 import { useContent } from "../store.jsx";
 import { Alert, Badge, Button, Card, Empty, ErrorBox, PageHead, Spinner, fmtDate, timeAgo, useConfirm, useLoad, useToast } from "../ui.jsx";
-import { describeChanges, keyLabel, valueText } from "../docOps.js";
+import { describeChanges, keyLabel, valueText, sectionNames } from "../docOps.js";
 import { docLabel } from "../editor/panels.jsx";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ export default function Revisions() {
     } catch (e) { toast(e.message, { tone: "error" }); }
   };
   if (!store?.loaded) return <div className="a-page"><Spinner /></div>;
-  const canEdit = docId === "site" ? can("site.edit") : docId === "seo" ? can("seo.edit") : docId === "forms" ? can("forms.edit") : can("pages.edit");
+  const canEdit = docId === "site" ? can(["site.edit", "site.code"]) : docId === "seo" ? can("seo.edit") : docId === "forms" ? can("forms.edit") : can("pages.edit");
   const pending = (sched || []).filter((s) => s.status === "pending");
   return (
     <div className="a-page">
@@ -95,7 +95,11 @@ export default function Revisions() {
             <Card title={`Revision ${view.rev}`} subtitle={`Published ${fmtDate(view.meta.publishedAt)} by ${view.meta.publishedBy?.name || "system"}`} actions={canEdit && (
               <Button size="sm" variant="primary" onClick={async () => {
                 if (!(await confirm({ title: `Restore revision ${view.rev} to the draft?`, message: "The current draft of this document is replaced. Nothing changes on the live site until you publish.", confirmLabel: "Restore to draft" }))) return;
-                try { await store.restoreRevision(docId, view.rev); toast(`Revision ${view.rev} is now the draft - review and publish it`); } catch (e) { toast(e.message, { tone: "error" }); }
+                try {
+                  const r = await store.restoreRevision(docId, view.rev);
+                  const kept = r?.kept?.length ? ` (${sectionNames(r.kept)} left as they are - you can't change them)` : "";
+                  toast(`Revision ${view.rev} is now the draft${kept} - review and publish it`);
+                } catch (e) { toast(e.message, { tone: "error" }); }
               }}>Restore to draft</Button>
             )}>
               <div className="a-section-title">Changes in this version</div>

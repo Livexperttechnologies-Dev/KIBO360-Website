@@ -32,7 +32,7 @@ function mount(initial, { hydrate }) {
 
 async function start() {
   const boot = bootData();
-  const isAdmin = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/");
+  const isAdmin = /^\/admin(\/|$)/i.test(window.location.pathname); // same match as the /admin route
 
   // 1) Inside the Super Admin visual editor (same-origin iframe only).
   if (!isAdmin && params.get("kibo_editor") === "1" && window.parent !== window) {
@@ -57,7 +57,11 @@ async function start() {
   }
 
   // 3) Live site. Hydrate server/prerendered HTML when it matches this URL.
-  const initial = { mode: "live", docs: boot.docs || {}, version: boot.version || 0, mediaBase: boot.mediaBase || API_BASE };
+  // Server-rendered content is current - unless this HTML came from the
+  // browser's cache (Back/Forward, cached copy): then check it like a static page.
+  const nav = (performance.getEntriesByType?.("navigation") || [])[0];
+  const fromCache = !nav || nav.type === "back_forward" || (nav.transferSize === 0 && nav.decodedBodySize > 0);
+  const initial = { mode: "live", docs: boot.docs || {}, version: boot.version || 0, mediaBase: boot.mediaBase || API_BASE, fresh: boot.fresh === true && !fromCache };
   const route = container.getAttribute("data-prerendered-route");
   const matches = route && (window.location.pathname === route || window.location.pathname === `${route}/`);
   mount(initial, { hydrate: container.hasChildNodes() && matches });

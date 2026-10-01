@@ -4,7 +4,7 @@ import { useAuth } from "../AdminApp.jsx";
 import { useContent, saveLabel } from "../store.jsx";
 import { api, upload } from "../api.js";
 import { Button, I, IconButton, Select, Spinner, Tabs, timeAgo, useConfirm, useNow, useToast, Badge } from "../ui.jsx";
-import { docType, itemAction, sectionAction, setField, setSectionOrder, imageValue } from "../docOps.js";
+import { docType, itemAction, sectionAction, setField, setSectionOrder, imageValue, sectionNames } from "../docOps.js";
 import { siteEntries } from "../../cms/seo.js";
 import { BLOCKS } from "../../cms/blocks.jsx";
 import Inspector from "./Inspector.jsx";
@@ -339,7 +339,7 @@ export default function Editor() {
       store.update("site", (d) => ({ ...(d || {}), [section]: value }), { label, coalesce: `site|${section}` });
     },
     openBlocks: (after) => setDialog({ kind: "blocks", after, docId: pageDocId, order: structure?.sections?.map((s) => s.id) || [] }),
-    openPublish: () => setDialog({ kind: "publish" }),
+    openPublish: async () => { await store.flush(); setDialog({ kind: "publish" }); },
   };
 
   return (
@@ -373,7 +373,7 @@ export default function Editor() {
         <Button size="sm" icon="history" className="hide-sm" onClick={() => setDialog({ kind: "history" })}>History</Button>
         <Button size="sm" icon="eye" onClick={async () => { await flushFrame(); await store.flush(); setDialog({ kind: "preview" }); }}>Preview</Button>
         {canPublish && (
-          <Button size="sm" variant="primary" icon="send" disabled={!anyDirty} onClick={async () => { await flushFrame(); setDialog({ kind: "publish" }); }}>
+          <Button size="sm" variant="primary" icon="send" disabled={!anyDirty} onClick={async () => { await flushFrame(); await store.flush(); setDialog({ kind: "publish" }); }}>
             Publish
           </Button>
         )}
@@ -384,10 +384,16 @@ export default function Editor() {
           <I n="history" size={15} />
           Viewing revision {revision.rev} of {revision.label} (published {timeAgo(revision.publishedAt)}) - read only.
           <span className="a-spacer" />
-          {can(revision.docId === "site" ? "site.edit" : "pages.edit") && <Button size="sm" onClick={async () => {
+          {can(revision.docId === "site" ? ["site.edit", "site.code"] : "pages.edit") && <Button size="sm" onClick={async () => {
             const ok = await confirm({ title: `Restore revision ${revision.rev}?`, message: "Your current draft of this document is replaced by this version. The live site does not change until you publish.", confirmLabel: "Restore to draft" });
             if (!ok) return;
-            try { await store.restoreRevision(revision.docId, revision.rev); toast(`Revision ${revision.rev} restored to the draft`); setView("edit"); setRevision(null); } catch (e) { toast(e.message, { tone: "error" }); }
+            try {
+              const r = await store.restoreRevision(revision.docId, revision.rev);
+              const kept = r?.kept?.length ? ` (${sectionNames(r.kept)} left as they are - you can't change them)` : "";
+              toast(`Revision ${revision.rev} restored to the draft${kept}`, kept ? { duration: 7000 } : undefined);
+              setView("edit");
+              setRevision(null);
+            } catch (e) { toast(e.message, { tone: "error" }); }
           }}>Restore to draft</Button>}
           <Button size="sm" variant="primary" onClick={() => { setView("edit"); setRevision(null); }}>Back to editing</Button>
         </div>

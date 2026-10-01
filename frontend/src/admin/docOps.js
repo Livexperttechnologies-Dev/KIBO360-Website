@@ -240,8 +240,12 @@ export function diffPatch(docId, saved, working) {
         else if (!same(a[key], b[key])) out[key] = b[key];
       }
       if (Object.keys(out).length) patch[k] = out;
-    } else if (!same(saved?.[k], working?.[k]) && working?.[k] !== undefined) {
-      patch[k] = working[k];
+    } else if (!same(saved?.[k], working?.[k])) {
+      // A section the server has but this draft no longer does (undo back to
+      // before its first edit) is sent as null = remove it. Sections this
+      // editor never loaded are absent from `saved` too, so never deleted.
+      if (working?.[k] !== undefined) patch[k] = working[k];
+      else if (saved?.[k] !== undefined) patch[k] = null;
     }
   }
   return Object.keys(patch).length ? patch : null;
@@ -260,7 +264,8 @@ export function applyPatch(docId, base, patch) {
       const m = { ...(out[k] || {}) };
       for (const [fk, fv] of Object.entries(v || {})) { if (fv === null) delete m[fk]; else m[fk] = fv; }
       out[k] = m;
-    } else out[k] = v;
+    } else if (v === null) delete out[k];
+    else out[k] = v;
   }
   return out;
 }
@@ -283,6 +288,15 @@ export function describeChanges(docId, before, after) {
   }
   return out;
 }
+
+const SECTION_NAMES = { header: "the header", menus: "the menus", footer: "the footer", banners: "the banners", settings: "the website settings", code: "the header & footer scripts" };
+/** "the header and the footer" - names of site sections (for messages). */
+export const sectionNames = (keys) => {
+  const n = (keys || []).map((k) => SECTION_NAMES[k] || k);
+  return n.length > 1 ? `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}` : n[0] || "";
+};
+/** Toast after a discard: names what was kept because this person may not change it. */
+export const discardedMessage = (kept) => (kept?.length ? `Draft discarded. Changes to ${sectionNames(kept)} were kept - you don't have permission to change them.` : "Draft discarded");
 
 /** Short text preview of any stored value. */
 export function valueText(v) {
