@@ -210,7 +210,8 @@ export function siteEntries(docs) {
   for (const p of PAGES) out.push({ id: p.id, path: p.path, label: p.label, builtin: true, noindex: !!p.noindex, sitemap: p.sitemap || {} });
   for (const [docId, d] of Object.entries(docs || {})) {
     if (!docId.startsWith("page:c-") || !d?.meta?.slug) continue;
-    out.push({ id: docId.slice(5), path: d.meta.slug, label: d.meta.label || d.meta.slug, builtin: false, noindex: false, sitemap: {} });
+    const tpl = PAGES.find((p) => p.id === d.meta.template); // copy of a built-in page?
+    out.push({ id: docId.slice(5), path: d.meta.slug, label: d.meta.label || d.meta.slug, builtin: false, noindex: !!tpl?.noindex, sitemap: tpl?.sitemap?.include === false ? { include: false } : {}, template: d.meta.template || "custom" });
   }
   return out;
 }

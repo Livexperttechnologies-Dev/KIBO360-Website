@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { pageById } from "../cms/pageMeta.js";
 import { breadcrumbsFor } from "../cms/seo.js";
-import { useCms } from "../cms/content.jsx";
+import { useCms, usePageInstance } from "../cms/content.jsx";
 
 /**
  * Breadcrumb trail. Pass `page` (registry id) to use the SEO-managed labels,
@@ -9,10 +9,11 @@ import { useCms } from "../cms/content.jsx";
  */
 export default function Breadcrumbs({ page, items: given }) {
   const { docs } = useCms();
+  const inst = usePageInstance(); // a copy shows its own trail: Home > copy
   let items = given;
   if (page) {
-    const meta = pageById(page);
-    items = breadcrumbsFor(meta, docs[`page:${page}`]?.seo || {}).map((c) => ({ label: c.label, to: c.path }));
+    const meta = inst ? inst.meta : pageById(page);
+    items = breadcrumbsFor(meta, docs[inst ? inst.docId : `page:${page}`]?.seo || {}).map((c) => ({ label: c.label, to: c.path }));
   }
   if (!items?.length) return null;
   return (

@@ -20,6 +20,25 @@ Nothing a visitor sees changes until someone with publish rights publishes.
   publish leaves the live site untouched). Every publish is kept in
   `content/revisions/` (last 100 per document) and can be restored to a draft.
 
+## Duplicating a page
+
+Pages & Content → **Duplicate** (or **Duplicate this page** in the visual
+editor) makes a new page with the same design, sections and content:
+
+- **Built-in pages** (Home, HMS, CMS, About, …): the copy uses the same page
+  design (`meta.template` = the original's id). You can change its text,
+  images, buttons and lists, rearrange or hide sections and add new ones.
+  Changes to the copy never touch the original.
+- **Landing pages**: the copy gets the same blocks in the same order.
+- If the page has unpublished changes, you choose whether to copy the current
+  draft or the live version.
+- The copy is a draft at its own address until you publish it. Its search
+  title, description, social preview and schema start fresh, so the two pages
+  don't compete in search. Robots settings are kept, and a copy of the Thank
+  You page stays out of search like the original. Of the original's automatic
+  structured data, only the FAQ is carried over, built from the copy's own FAQ.
+- Duplicating needs the "Create and delete custom pages" permission.
+
 ## Two ways to serve the public site
 
 | | Static hosting (current) | Node site server (recommended) |

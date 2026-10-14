@@ -1,6 +1,6 @@
 import SectionHeading from "./SectionHeading.jsx";
 import { T, R, List } from "../cms/primitives.jsx";
-import { useCms } from "../cms/content.jsx";
+import { useCms, usePageInstance } from "../cms/content.jsx";
 import { itemIds } from "../cms/content.jsx";
 import { htmlToText } from "../cms/sanitize.js";
 
@@ -35,7 +35,8 @@ export default function FaqSection({ faqs, title = "Frequently asked questions."
  */
 export function useFaqJsonLd(docId, listKey, faqs) {
   const { docs } = useCms();
-  const doc = docs[docId] || {};
+  const inst = usePageInstance(); // a copy's FAQ comes from the copy
+  const doc = docs[inst?.docId || docId] || {};
   // A hidden FAQ section must not keep publishing FAQPage schema.
   if (doc.layout?.hidden?.[listKey.split(".")[0]]) return null;
   const list = doc.lists?.[listKey];

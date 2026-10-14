@@ -87,9 +87,21 @@ export const useIsEditing = () => useContext(CmsCtx).mode === "edit";
 
 export const joinKey = (prefix, k) => (prefix ? (k ? `${prefix}.${k}` : prefix) : k);
 
-/** Content scope for one page's document. */
+// A copy of a built-in page (Super Admin -> Duplicate) renders the original
+// page component, but with the copy's own document and page details:
+//   { docId: "page:c-…", meta: { id, path, label, title, … } }
+const PageInstanceCtx = createContext(null);
+export function PageInstance({ docId, meta, children }) {
+  const value = useMemo(() => ({ docId, meta }), [docId, meta]);
+  return <PageInstanceCtx.Provider value={value}>{children}</PageInstanceCtx.Provider>;
+}
+/** The copy being rendered, or null for the page itself. */
+export const usePageInstance = () => useContext(PageInstanceCtx);
+
+/** Content scope for one page's document (a copy's own document when rendering a copy). */
 export function PageDoc({ id, children }) {
-  return <ScopeCtx.Provider value={{ docId: `page:${id}`, prefix: "" }}>{children}</ScopeCtx.Provider>;
+  const inst = useContext(PageInstanceCtx);
+  return <ScopeCtx.Provider value={{ docId: inst?.docId || `page:${id}`, prefix: "" }}>{children}</ScopeCtx.Provider>;
 }
 /** Scope for global site content (header, footer...). */
 export function SiteDoc({ children, prefix = "" }) {

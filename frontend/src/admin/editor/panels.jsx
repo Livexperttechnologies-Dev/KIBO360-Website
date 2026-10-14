@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BLOCKS } from "../../cms/blocks.jsx";
-import { BUILTIN_PATHS } from "../../cms/pageMeta.js";
+import { BUILTIN_PATHS, BUILTIN_REDIRECTS } from "../../cms/pageMeta.js";
 import { api } from "../api.js";
 import { useAuth } from "../AdminApp.jsx";
 import { Alert, Badge, Button, Check, CopyButton, Empty, Field, I, IconButton, Input, Modal, Select, Spinner, Tabs, fmtDate, useConfirm, useLoad, useToast } from "../ui.jsx";
@@ -372,7 +372,7 @@ const SLUG_RE = /^\/[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
 const RESERVED = ["/admin", "/api", "/uploads", "/assets", "/preview", "/thank-you", "/sitemap.xml", "/robots.txt", "/llms.txt"];
 export function slugProblem(slug, store, selfId) {
   if (!SLUG_RE.test(slug)) return "Use lowercase letters, numbers and dashes, starting with / (e.g. /landing/hospital-software)";
-  if (RESERVED.some((r) => slug === r || slug.startsWith(`${r}/`)) || BUILTIN_PATHS.includes(slug)) return "That address is already used by the website";
+  if (RESERVED.some((r) => slug === r || slug.startsWith(`${r}/`)) || BUILTIN_PATHS.includes(slug) || BUILTIN_REDIRECTS.some((r) => r.from === slug)) return "That address is already used by the website";
   const clash = Object.entries(store.working).find(([id, d]) => id !== selfId && id.startsWith("page:c-") && d?.meta?.slug === slug);
   if (clash) return "Another page already uses this address";
   return null;

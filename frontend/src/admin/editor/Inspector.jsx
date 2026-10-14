@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import DuplicatePage from "../DuplicatePage.jsx";
 import Icon, { ICON_NAMES } from "../../components/Icon.jsx";
 import { BLOCKS } from "../../cms/blocks.jsx";
 import { mediaUrl, upload } from "../api.js";
@@ -403,6 +404,8 @@ export function ImagePickerField({ ctx, label, value, onChange, disabled, hint }
 // -------------------------------------------------------------- page info
 function PageSummary({ ctx }) {
   const { store, pageDocId, entry } = ctx;
+  const navigate = useNavigate();
+  const [duplicating, setDuplicating] = useState(false);
   if (!entry) {
     return <Alert tone="warn">This address is not a page on the website. Pick a page from the list at the top, or create a new one under Pages.</Alert>;
   }
@@ -422,6 +425,14 @@ function PageSummary({ ctx }) {
       </div>
       {(changes.length > 0 || siteChanges.length > 0) && ctx.can(["pages.publish", "site.publish", "seo.publish"]) && (
         <Button variant="primary" icon="send" onClick={ctx.openPublish}>Review &amp; publish</Button>
+      )}
+      {ctx.can("pages.create") && !ctx.viewingRevision && <Button icon="copy" onClick={() => setDuplicating(true)}>Duplicate this page</Button>}
+      {duplicating && (
+        <DuplicatePage
+          source={{ docId: pageDocId, label: entry.label, path: entry.path, builtin: entry.builtin }}
+          onClose={() => setDuplicating(false)}
+          onCreated={(slug) => { setDuplicating(false); navigate(`/admin/editor?path=${encodeURIComponent(slug)}`); }}
+        />
       )}
       <div className="a-section-title">How to edit</div>
       <ul className="a-stack tight a-small" style={{ paddingLeft: 0 }}>

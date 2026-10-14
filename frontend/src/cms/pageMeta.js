@@ -97,6 +97,18 @@ export const pageById = (id) => PAGES.find((p) => p.id === id) || null;
 export const pageByPath = (path) => PAGES.find((p) => p.path === path) || null;
 export const BUILTIN_PATHS = PAGES.map((p) => p.path);
 
+/**
+ * Page details of a page made in Super Admin. A copy of a built-in page keeps
+ * that page's noindex (e.g. a copy of Thank You stays out of search).
+ */
+export function customPageMeta(docId, doc) {
+  const slug = doc?.meta?.slug;
+  return {
+    id: docId.slice(5), path: slug, label: doc?.meta?.label || slug, title: doc?.meta?.label || slug, description: "",
+    noindex: !!pageById(doc?.meta?.template)?.noindex,
+  };
+}
+
 /** Legacy / short URLs that always redirect (in addition to CMS redirects). */
 export const BUILTIN_REDIRECTS = [
   { from: "/products/hms", to: "/products/hospitalmanagementsoftware" },

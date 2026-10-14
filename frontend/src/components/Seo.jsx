@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { useCms } from "../cms/content.jsx";
+import { useCms, usePageInstance } from "../cms/content.jsx";
 import { pageById } from "../cms/pageMeta.js";
 import { computeSeo, headTags } from "../cms/seo.js";
 import { SNIPPET_ATTR } from "../cms/customCode.js";
@@ -42,7 +42,12 @@ export default function Seo({ page, jsonLd = null }) {
   const { docs, mode, mediaBase } = useCms();
   const { pathname } = useLocation();
   const collector = useContext(HeadCollectorContext);
-  const meta = typeof page === "string" ? pageById(page) : page;
+  const inst = usePageInstance();
+  // A copy of a built-in page has its own address, name and search settings.
+  // Of the original's structured data only the FAQ (built from the copy's
+  // own content) applies - product/about/contact schema describe the original.
+  const meta = inst ? inst.meta : typeof page === "string" ? pageById(page) : page;
+  if (inst) jsonLd = [].concat(jsonLd || []).filter((x) => x?.["@type"] === "FAQPage");
   const seo = useMemo(() => {
     if (!meta) return null;
     const s = computeSeo({ page: meta, docs, path: meta.path || pathname, codeJsonLd: jsonLd, mediaBase });

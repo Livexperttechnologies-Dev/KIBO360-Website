@@ -330,7 +330,7 @@ export default function Editor() {
   const goPage = (p) => setParams((prev) => { const n = new URLSearchParams(prev); n.set("path", safePath(p)); n.delete("panel"); return n; });
 
   const ctx = {
-    store, can, readonly, pageDocId, entry, path, pages, sel, structure,
+    store, can, readonly, pageDocId, entry, path, pages, sel, structure, viewingRevision: view === "revision",
     setValue, doSection, doItem, scrollTo, openMedia, goPage,
     select: (s) => setSel(s),
     frame: () => frameRef.current,

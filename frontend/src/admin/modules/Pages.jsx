@@ -7,6 +7,7 @@ import { useContent } from "../store.jsx";
 import { Alert, Badge, Button, Card, Empty, ErrorBox, Field, I, Input, Modal, PageHead, Spinner, Tabs, timeAgo, useConfirm, useToast } from "../ui.jsx";
 import { describeChanges } from "../docOps.js";
 import { PublishDialog, slugProblem } from "../editor/panels.jsx";
+import DuplicatePage, { slugify } from "../DuplicatePage.jsx";
 
 // ---------------------------------------------------------------------------
 // Pages & Content: every page of the website with its draft/live status.
@@ -48,6 +49,7 @@ export default function PagesList() {
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
   const [publishing, setPublishing] = useState(null);
+  const [duplicating, setDuplicating] = useState(null);
   const entries = useMemo(() => siteEntries(store?.working || {}), [store?.working]);
 
   if (!store?.loaded) return <div className="a-page"><Spinner /></div>;
@@ -92,6 +94,7 @@ export default function PagesList() {
                         <div className="a-row nowrap" style={{ justifyContent: "flex-end" }}>
                           <Button size="sm" variant="primary" icon="edit" onClick={() => navigate(`/admin/editor?path=${encodeURIComponent(e.path)}`)}>{can("pages.edit") ? "Edit" : "View"}</Button>
                           {s.changes > 0 && can(["pages.publish", "seo.publish"]) && <Button size="sm" icon="send" onClick={() => setPublishing(docId)}>Publish</Button>}
+                          {can("pages.create") && <Button size="sm" icon="copy" title="Make a new page with the same design and content" onClick={() => setDuplicating({ docId, label: e.label, path: e.path, builtin: e.builtin })}>Duplicate</Button>}
                           {(store.published[docId] || e.builtin) && <a className="a-btn a-btn-sm a-btn-ghost" href={e.path} target="_blank" rel="noopener noreferrer" title="Open the live page"><I n="external" size={14} /></a>}
                           {!e.builtin && can("pages.create") && (!store.published[docId] || can("pages.publish")) && (
                             <Button size="sm" variant="ghost" icon="trash" aria-label="Delete page" onClick={async () => {
@@ -111,6 +114,7 @@ export default function PagesList() {
         )}
       </Card>
       {creating && <NewPage onClose={() => setCreating(false)} onCreated={(slug) => navigate(`/admin/editor?path=${encodeURIComponent(slug)}`)} />}
+      {duplicating && <DuplicatePage source={duplicating} onClose={() => setDuplicating(null)} onCreated={(slug) => navigate(`/admin/editor?path=${encodeURIComponent(slug)}`)} />}
       {publishing && <PublishDialog ctx={{ store, can, pageDocId: publishing, path: entries.find((e) => `page:${e.id}` === publishing)?.path }} docIds={[publishing]} onClose={() => setPublishing(null)} />}
     </div>
   );
@@ -125,7 +129,7 @@ function NewPage({ onClose, onCreated }) {
   const [tpl, setTpl] = useState("landing");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const auto = `/${label.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60)}`;
+  const auto = `/${slugify(label)}`;
   const value = touched ? slug : auto === "/" ? "" : auto;
   const problem = value ? slugProblem(value, store, null) : null;
   const create = async () => {

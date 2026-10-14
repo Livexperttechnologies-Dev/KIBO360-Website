@@ -281,6 +281,13 @@ export function ContentStoreProvider({ children }) {
     return r;
   }, [reloadDoc]);
 
+  /** New draft page with the same design and content as `docId`. */
+  const duplicatePage = useCallback(async (docId, body) => {
+    const r = await api(`/api/admin/content/pages/${encodeURIComponent(docId)}/duplicate`, { method: "POST", body });
+    await reloadDoc(r.docId);
+    return r;
+  }, [reloadDoc]);
+
   const deletePage = useCallback(async (docId) => {
     clearTimeout(timers.current.get(docId));
     timers.current.delete(docId);
@@ -327,12 +334,12 @@ export function ContentStoreProvider({ children }) {
   const value = useMemo(() => ({
     ...state, save, hist,
     load, reloadDoc, refreshStatus, update, undo, redo, canUndo, peekUndo, peekRedo, flush, hasPending, saveDoc,
-    publish, schedulePublish, discard, restoreRevision, createPage, deletePage, unpublishPage, isDirty,
+    publish, schedulePublish, discard, restoreRevision, createPage, duplicatePage, deletePage, unpublishPage, isDirty,
     getWorking: (docId) => workingRef.current[docId] ?? emptyFor(docId),
     subscribe: (fn) => { listeners.current.add(fn); return () => listeners.current.delete(fn); },
     retrySave: () => flush(),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [state, save, hist, load, reloadDoc, refreshStatus, update, undo, redo, flush, hasPending, saveDoc, publish, schedulePublish, discard, restoreRevision, createPage, deletePage, unpublishPage, isDirty]);
+  }), [state, save, hist, load, reloadDoc, refreshStatus, update, undo, redo, flush, hasPending, saveDoc, publish, schedulePublish, discard, restoreRevision, createPage, duplicatePage, deletePage, unpublishPage, isDirty]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

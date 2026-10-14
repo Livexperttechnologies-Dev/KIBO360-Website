@@ -1,16 +1,39 @@
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Seo, { HeadCollectorContext } from "../components/Seo.jsx";
-import { useCms, PageDoc } from "../cms/content.jsx";
+import { useCms, PageDoc, PageInstance } from "../cms/content.jsx";
 import { Sections } from "../cms/sections.jsx";
 import { matchRedirect } from "../cms/seo.js";
+import { customPageMeta } from "../cms/pageMeta.js";
+import Home from "./Home.jsx";
+import Products from "./Products.jsx";
+import ProductHMS from "./ProductHMS.jsx";
+import ProductCMS from "./ProductCMS.jsx";
+import About from "./About.jsx";
+import Contact from "./Contact.jsx";
+import PrivacyPolicy from "./PrivacyPolicy.jsx";
+import Terms from "./Terms.jsx";
+import ThankYou from "./ThankYou.jsx";
+
+// Built-in page designs a copy can use (meta.template = the original's id).
+const TEMPLATES = { home: Home, products: Products, hms: ProductHMS, cms: ProductCMS, about: About, contact: Contact, privacy: PrivacyPolicy, terms: Terms, thankyou: ThankYou };
 
 const norm = (p) => (p.replace(/\/+$/, "") || "/").toLowerCase();
 
-/** Pages created in Super Admin (block-built landing pages). */
+/** Pages created in Super Admin: block-built landing pages, or copies of a built-in page. */
 function CustomPage({ docId, doc }) {
   const id = docId.slice(5);
-  const meta = { id, path: doc.meta.slug, label: doc.meta.label, title: doc.meta.label || doc.meta.slug, description: "" };
+  const template = doc.meta.template;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const meta = useMemo(() => customPageMeta(docId, doc), [docId, doc.meta.slug, doc.meta.label, template]);
+  const Design = TEMPLATES[template];
+  if (Design) {
+    return (
+      <PageInstance docId={docId} meta={meta}>
+        <Design />
+      </PageInstance>
+    );
+  }
   return (
     <PageDoc id={id}>
       <Seo page={meta} />
@@ -54,7 +77,7 @@ export default function DynamicPage() {
   const collector = useContext(HeadCollectorContext);
   const path = norm(pathname);
   const entry = Object.entries(docs).find(([id, d]) => id.startsWith("page:c-") && d?.meta?.slug === path);
-  if (entry) return <CustomPage docId={entry[0]} doc={entry[1]} />;
+  if (entry) return <CustomPage key={entry[0]} docId={entry[0]} doc={entry[1]} />;
 
   const r = matchRedirect(docs, pathname);
   if (r && mode === "live") {

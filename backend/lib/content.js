@@ -1,5 +1,5 @@
 import { randomToken, sha256, newId, clampStr, rateLimit } from "./security.js";
-import { DOC_ID_RE, docType, normalizeDoc, PATCHABLE, ValidationError, normPage, validSlug, analyzeRedirects } from "./schema.js";
+import { DOC_ID_RE, docType, normalizeDoc, PATCHABLE, ValidationError, normPage, validSlug, analyzeRedirects, BUILTIN_PAGES, isBuiltinAddress } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Content engine: Draft -> Preview -> Publish -> Live.
@@ -177,6 +177,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         if (errors.length) throw new ValidationError(`Fix redirect errors before publishing: ${errors[0].message}`, errors);
       }
       if (docType(docId) === "page" && clean.meta?.slug) {
+        if (docId.startsWith("page:c-") && isBuiltinAddress(clean.meta.slug)) throw new ValidationError(`The URL ${clean.meta.slug} belongs to the website itself - choose another address`);
         const clash = Object.entries(next.docs).find(([id, d]) => id !== docId && d.data?.meta?.slug === clean.meta.slug);
         if (clash) throw new ValidationError(`Another page already uses the URL ${clean.meta.slug}`);
       }
@@ -348,7 +349,11 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
           base[k] = patch[k];
         }
       }
-      if (t === "page" && docId.startsWith("page:c-")) base.meta = { ...(base.meta || {}), template: "custom" };
+      if (t === "page" && docId.startsWith("page:c-")) {
+        // the design (template) is chosen when the page is made and never changes
+        const template = workingData(docId, pub)?.meta?.template;
+        base.meta = { ...(base.meta || {}), template: template || "custom" };
+      }
       const clean = normalizeDoc(docId, base);
       if (t === "site" && keys.includes("code") && codeChanged(workingData(docId, pub), clean)) {
         const k = `code:${req.user.id}:${Math.floor(Date.now() / 60_000)}`;
@@ -539,20 +544,62 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
     });
 
     // ---- custom pages ----------------------------------------------------------
-    app.post("/api/admin/content/pages", requireAuth("pages.create"), handle((req, res) => {
+    /** A free address for a new page, or { error }. */
+    function newPageSlug(req, pub) {
       const slug = validSlug(req.body?.slug);
-      if (!slug) return res.status(400).json({ ok: false, error: "Use a URL like /landing/hospital-software (lowercase letters, numbers and dashes)" });
-      const builtinPaths = Array.isArray(req.body?.reservedPaths) ? req.body.reservedPaths : [];
-      if (builtinPaths.includes(slug)) return res.status(400).json({ ok: false, error: "That URL belongs to an existing page" });
-      const pub = loadPublished();
+      if (!slug) return { error: "Use a URL like /landing/hospital-software (lowercase letters, numbers and dashes)" };
+      if (isBuiltinAddress(slug) || (Array.isArray(req.body?.reservedPaths) && req.body.reservedPaths.includes(slug))) return { error: "That URL belongs to an existing page" };
       const all = [...new Set([...Object.keys(pub.docs), ...listDraftIds()])];
-      if (all.some((id) => (loadDraft(id)?.data || pub.docs[id]?.data)?.meta?.slug === slug)) return res.status(400).json({ ok: false, error: "Another page already uses this URL" });
-      const docId = `page:c-${newId().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10)}`;
+      if (all.some((id) => (loadDraft(id)?.data || pub.docs[id]?.data)?.meta?.slug === slug)) return { error: "Another page already uses this URL" };
+      return { slug };
+    }
+    const newPageId = () => `page:c-${newId().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10)}`;
+
+    app.post("/api/admin/content/pages", requireAuth("pages.create"), handle((req, res) => {
+      const pub = loadPublished();
+      const { slug, error } = newPageSlug(req, pub);
+      if (error) return res.status(400).json({ ok: false, error });
+      const docId = newPageId();
       const data = normalizeDoc(docId, { meta: { label: req.body?.label || slug, slug, template: "custom" }, layout: req.body?.layout || {}, fields: req.body?.fields || {} });
       saveDraft(docId, { data, rev: 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user) });
       audit.log(req, { action: "content.page_created", target: slug, details: { docId } });
       res.status(201).json({ ok: true, docId, status: docStatus(docId) });
     }));
+    /**
+     * Duplicate a page: a new draft page with the same design, sections and
+     * content. A built-in page's copy renders with that page's design
+     * (template = its id). Search texts (title, description, social cards,
+     * schema, canonical) start fresh so the two pages don't compete; robots
+     * settings are kept.
+     */
+    app.post("/api/admin/content/pages/:docId/duplicate", requireAuth("pages.create"), handle((req, res) => {
+      const src = docParam(req, res); if (!src) return;
+      if (docType(src) !== "page") return res.status(400).json({ ok: false, error: "Only pages can be duplicated" });
+      if (!can(req, "pages.view")) return res.status(403).json({ ok: false, error: "You can't view this page" });
+      const builtinId = src.startsWith("page:c-") ? null : src.slice(5);
+      if (builtinId && !Object.prototype.hasOwnProperty.call(BUILTIN_PAGES, builtinId)) return res.status(404).json({ ok: false, error: "Page not found" });
+      const pub = loadPublished();
+      if (!builtinId && !pub.docs[src] && !loadDraft(src)) return res.status(404).json({ ok: false, error: "This page no longer exists" });
+      const fromLive = req.body?.from === "live";
+      if (fromLive && !builtinId && !pub.docs[src]) return res.status(400).json({ ok: false, error: "This page has never been published - copy its draft instead" });
+      const source = fromLive ? pub.docs[src]?.data || emptyDoc(src) : workingData(src, pub);
+      const { slug, error } = newPageSlug(req, pub);
+      if (error) return res.status(400).json({ ok: false, error });
+      const template = builtinId || (source?.meta?.template && source.meta.template !== "custom" ? source.meta.template : "custom");
+      const label = clampStr(req.body?.label, 120).trim() || `${String(source?.meta?.label || slug).slice(0, 113).trimEnd()} (copy)`;
+      const docId = newPageId();
+      const data = normalizeDoc(docId, {
+        fields: structuredClone(source?.fields || {}),
+        lists: structuredClone(source?.lists || {}),
+        layout: structuredClone(source?.layout || {}),
+        seo: source?.seo?.robots ? { robots: structuredClone(source.seo.robots) } : {},
+        meta: { label, slug, template },
+      });
+      saveDraft(docId, { data, rev: 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user) });
+      audit.log(req, { action: "content.page_duplicated", target: slug, details: { docId, from: src, version: fromLive ? "live" : "draft" } });
+      res.status(201).json({ ok: true, docId, status: docStatus(docId) });
+    }));
+
     app.delete("/api/admin/content/pages/:docId", requireAuth("pages.create"), handle((req, res) => {
       const docId = docParam(req, res); if (!docId) return;
       if (!docId.startsWith("page:c-")) return res.status(400).json({ ok: false, error: "Built-in pages cannot be deleted" });
@@ -562,7 +609,24 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         publishDocs([{ docId, remove: true }], { user: req.user, note: "Page deleted" });
       }
       deleteDraft(docId);
-      audit.log(req, { action: "content.page_deleted", target: docId });
+      // a pending schedule would otherwise bring the deleted page back
+      const schedules = loadSchedules();
+      let cancelled = 0;
+      for (const s of schedules) {
+        if (s.status !== "pending" || !s.docIds?.includes(docId)) continue;
+        cancelled++;
+        if (s.docIds.length === 1) {
+          s.status = "cancelled";
+          s.cancelledBy = who(req.user);
+          s.note = clampStr(`${s.note ? `${s.note} - ` : ""}page deleted`, 200);
+        } else {
+          s.docIds = s.docIds.filter((id) => id !== docId);
+          if (s.snapshot) delete s.snapshot[docId];
+          if (Array.isArray(s.liveCode)) s.liveCode = s.liveCode.filter((id) => id !== docId);
+        }
+      }
+      if (cancelled) saveSchedules(schedules);
+      audit.log(req, { action: "content.page_deleted", target: docId, details: cancelled ? { schedulesChanged: cancelled } : undefined });
       res.json({ ok: true });
     }));
 

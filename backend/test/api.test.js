@@ -677,6 +677,173 @@ describe("header & footer scripts", () => {
   });
 });
 
+describe("duplicate pages", () => {
+  let superT, editorT, viewerT;
+  const member = async (email, roleId) => {
+    const r = await call("/api/admin/users", { method: "POST", token: superT, body: { email, password: "Password12345", roleId } });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const t = await login(email, "Password12345");
+    assert.equal((await call("/api/admin/password", { method: "POST", token: t, body: { current: "Password12345", next: "Chosen12345678" } })).status, 200);
+    return t;
+  };
+  const dup = (t, docId, body) => call(`/api/admin/content/pages/${encodeURIComponent(docId)}/duplicate`, { method: "POST", token: t, body });
+  const doc = async (docId) => (await call(`/api/admin/content/doc/${encodeURIComponent(docId)}`, { token: superT })).body;
+
+  before(async () => {
+    superT = await login(ADMIN.email, ADMIN.password);
+    editorT = await member("dup-editor@example.com", "content_manager");
+    viewerT = await member("dup-viewer@example.com", "viewer");
+  });
+
+  test("the server's list of built-in pages matches the website's", async () => {
+    const { BUILTIN_PAGES, BUILTIN_REDIRECT_PATHS } = await import("../lib/schema.js");
+    const { PAGES, BUILTIN_REDIRECTS } = await import(new URL("../../frontend/src/cms/pageMeta.js", import.meta.url).href);
+    assert.deepEqual(BUILTIN_PAGES, Object.fromEntries(PAGES.map((p) => [p.id, p.path])));
+    assert.deepEqual([...BUILTIN_REDIRECT_PATHS].sort(), BUILTIN_REDIRECTS.map((r) => r.from).sort());
+  });
+
+  test("old short addresses (/hms, /cms …) can't be used: they always redirect", async () => {
+    for (const slug of ["/hms", "/cms", "/his", "/products/hms", "/products/cms"]) {
+      assert.equal((await dup(superT, "page:cms", { label: "CMS", slug })).status, 400, slug);
+      assert.equal((await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "x", slug } })).status, 400, slug);
+    }
+    // renaming a page to one of them through the API can't go live either
+    const r = await dup(superT, "page:cms", { label: "CMS renamed", slug: "/landing/cms-renamed" });
+    await call(`/api/admin/content/doc/${encodeURIComponent(r.body.docId)}`, { method: "PATCH", token: superT, body: { meta: { label: "CMS", slug: "/cms" } } });
+    const p = await call("/api/admin/content/publish", { method: "POST", token: superT, body: { docIds: [r.body.docId] } });
+    assert.equal(p.status, 400, JSON.stringify(p.body));
+    assert.equal((await call("/api/content/published")).body.docs[r.body.docId], undefined);
+    await call(`/api/admin/content/pages/${encodeURIComponent(r.body.docId)}`, { method: "DELETE", token: superT });
+  });
+
+  test("deleting a page cancels its scheduled publish, so it can't come back", async () => {
+    const a = await dup(superT, "page:about", { label: "Scheduled copy", slug: "/landing/scheduled-copy" });
+    const s1 = await call("/api/admin/content/schedules", { method: "POST", token: superT, body: { docIds: [a.body.docId], at: new Date(Date.now() + 61_000).toISOString() } });
+    assert.equal(s1.status, 201, JSON.stringify(s1.body));
+    // and one together with another page
+    await call("/api/admin/content/doc/page:terms", { method: "PATCH", token: superT, body: { fields: { title: "Terms (with copy)" } } });
+    const s2 = await call("/api/admin/content/schedules", { method: "POST", token: superT, body: { docIds: [a.body.docId, "page:terms"], at: new Date(Date.now() + 61_000).toISOString() } });
+    assert.equal(s2.status, 201, JSON.stringify(s2.body));
+    assert.equal((await call(`/api/admin/content/pages/${encodeURIComponent(a.body.docId)}`, { method: "DELETE", token: superT })).status, 200);
+    const file = path.join(dataDir, "content/schedules.json");
+    let list = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(list.find((x) => x.id === s1.body.schedule.id).status, "cancelled");
+    assert.deepEqual(list.find((x) => x.id === s2.body.schedule.id).docIds, ["page:terms"]);
+    for (const x of list) if ([s1.body.schedule.id, s2.body.schedule.id].includes(x.id)) x.at = new Date(Date.now() - 1000).toISOString();
+    fs.writeFileSync(file, JSON.stringify(list));
+    svc.content.runDueSchedules();
+    const live = (await call("/api/content/published")).body.docs;
+    assert.equal(live[a.body.docId], undefined, "the deleted page stays deleted");
+    assert.equal(live["page:terms"].fields.title, "Terms (with copy)", "the rest of the schedule still ran");
+    list = (await call("/api/admin/content/schedules", { token: superT })).body.schedules;
+    assert.equal(list.find((x) => x.id === s2.body.schedule.id).status, "done");
+  });
+
+  test("the default name of a copy always keeps '(copy)'", async () => {
+    const long = "L".repeat(118);
+    const c = await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: long, slug: "/landing/long-name" } });
+    const r = await dup(superT, c.body.docId, { slug: "/landing/long-name-copy" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const label = (await doc(r.body.docId)).data.meta.label;
+    assert.ok(label.endsWith(" (copy)") && label.length <= 120, label);
+  });
+
+  test("a built-in page is copied with its design, sections and draft content", async () => {
+    await call("/api/admin/content/doc/page:hms", { method: "PATCH", token: superT, body: {
+      fields: { "hero.title": "HMS draft title" },
+      layout: { order: [], hidden: { faq: true }, dups: {}, blocks: {} },
+      seo: { title: "HMS search title", description: "HMS search text", robots: { index: false, follow: true } },
+    } });
+    const r = await dup(superT, "page:hms", { label: "HMS for nursing homes", slug: "/landing/hms-nursing" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.match(r.body.docId, /^page:c-[a-z0-9]+$/);
+    const copy = await doc(r.body.docId);
+    assert.equal(copy.data.meta.template, "hms", "renders with the HMS page design");
+    assert.equal(copy.data.meta.slug, "/landing/hms-nursing");
+    assert.equal(copy.data.meta.label, "HMS for nursing homes");
+    assert.equal(copy.data.fields["hero.title"], "HMS draft title");
+    assert.equal(copy.data.layout.hidden.faq, true);
+    assert.deepEqual(copy.data.seo, { robots: { index: false, follow: true } }, "search texts start fresh, robots settings stay");
+    assert.equal(copy.status.published, false, "a copy is a draft until published");
+    assert.equal((await call("/api/content/published")).body.docs[r.body.docId], undefined);
+    // the original is untouched
+    const orig = await doc("page:hms");
+    assert.equal(orig.data.fields["hero.title"], "HMS draft title");
+    assert.equal(orig.data.meta.template, undefined);
+  });
+
+  test("the live version can be copied instead of the draft", async () => {
+    const r = await dup(superT, "page:hms", { label: "HMS live copy", slug: "/landing/hms-live", from: "live" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const copy = await doc(r.body.docId);
+    assert.equal(copy.data.fields["hero.title"], undefined, "the unpublished draft title is not in a live copy");
+    assert.equal(copy.data.meta.template, "hms");
+    await call("/api/admin/content/doc/page:hms/discard", { method: "POST", token: superT });
+  });
+
+  test("a landing page is copied block for block, and a copy of a copy keeps its design", async () => {
+    const created = await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "Spring offer", slug: "/landing/spring-offer", layout: { order: ["b_hero1", "b_faq1"], hidden: {}, dups: {}, blocks: { b_hero1: { type: "hero" }, b_faq1: { type: "faq" } } } } });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    await call(`/api/admin/content/doc/${created.body.docId}`, { method: "PATCH", token: superT, body: { fields: { "b_hero1.title": "Spring offer for clinics" } } });
+    const r = await dup(superT, created.body.docId, { label: "Autumn offer", slug: "/landing/autumn-offer" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const copy = await doc(r.body.docId);
+    assert.equal(copy.data.meta.template, "custom");
+    assert.deepEqual(copy.data.layout.order, ["b_hero1", "b_faq1"]);
+    assert.equal(copy.data.layout.blocks.b_faq1.type, "faq");
+    assert.equal(copy.data.fields["b_hero1.title"], "Spring offer for clinics");
+    // never published: there is no live version to copy
+    assert.equal((await dup(superT, created.body.docId, { label: "x", slug: "/landing/x-live", from: "live" })).status, 400);
+    // a copy of an HMS copy is still an HMS-design page
+    const list = (await call("/api/admin/content/docs", { token: superT })).body.docs;
+    const hmsCopy = list.find((d) => d.slug === "/landing/hms-nursing");
+    const r2 = await dup(superT, hmsCopy.docId, { label: "HMS copy 2", slug: "/landing/hms-nursing-2" });
+    assert.equal((await doc(r2.body.docId)).data.meta.template, "hms");
+  });
+
+  test("addresses are checked on the server", async () => {
+    for (const slug of ["/products", "/about", "/", "/admin/x", "Not a URL", "/landing/spring-offer", "/landing/hms-nursing"]) {
+      const r = await dup(superT, "page:about", { label: "Bad", slug });
+      assert.equal(r.status, 400, `${slug}: ${JSON.stringify(r.body)}`);
+    }
+    // the plain "new page" route no longer depends on the browser for built-in addresses
+    assert.equal((await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "x", slug: "/contact" } })).status, 400);
+    assert.equal((await dup(superT, "page:nope", { label: "x", slug: "/landing/nope" })).status, 404);
+    assert.equal((await dup(superT, "seo", { label: "x", slug: "/landing/seo" })).status, 400);
+  });
+
+  test("duplicating needs the create-pages permission; a deleted page can't be copied", async () => {
+    assert.equal((await dup(viewerT, "page:about", { label: "x", slug: "/landing/viewer-copy" })).status, 403);
+    const r = await dup(editorT, "page:about", { label: "About (team copy)", slug: "/landing/about-team" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal((await call(`/api/admin/content/pages/${encodeURIComponent(r.body.docId)}`, { method: "DELETE", token: editorT })).status, 200);
+    assert.equal((await dup(superT, r.body.docId, { label: "x", slug: "/landing/ghost" })).status, 404);
+    const audit = await call("/api/admin/audit?limit=500", { token: superT });
+    assert.ok(audit.body.entries.some((e) => e.action === "content.page_duplicated" && e.userEmail === "dup-editor@example.com"));
+  });
+
+  test("a copy's design can't be changed by editing its page details", async () => {
+    const list = (await call("/api/admin/content/docs", { token: superT })).body.docs;
+    const copyId = list.find((d) => d.slug === "/landing/hms-nursing").docId;
+    for (const template of ["custom", "about", "evil"]) {
+      const r = await call(`/api/admin/content/doc/${encodeURIComponent(copyId)}`, { method: "PATCH", token: superT, body: { meta: { label: "Renamed", slug: "/landing/hms-nursing", template } } });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.data.meta.template, "hms");
+      assert.equal(r.body.data.meta.label, "Renamed");
+    }
+  });
+
+  test("a published copy goes live at its own address with the original's design", async () => {
+    const list = (await call("/api/admin/content/docs", { token: superT })).body.docs;
+    const copyId = list.find((d) => d.slug === "/landing/hms-nursing").docId;
+    assert.equal((await call("/api/admin/content/publish", { method: "POST", token: superT, body: { docIds: [copyId] } })).status, 200);
+    const live = (await call("/api/content/published")).body.docs[copyId];
+    assert.equal(live.meta.template, "hms");
+    assert.equal(live.meta.slug, "/landing/hms-nursing");
+    assert.equal(live.fields["hero.title"], "HMS draft title");
+  });
+});
+
 describe("security hardening", () => {
   let superT;
   // creates a user, replaces the temporary password and returns a token

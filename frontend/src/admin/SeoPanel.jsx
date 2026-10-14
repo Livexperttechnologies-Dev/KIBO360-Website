@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { pageById } from "../cms/pageMeta.js";
+import { pageById, customPageMeta } from "../cms/pageMeta.js";
 import { analyzePage, computeSeo, siteEntries } from "../cms/seo.js";
 import { useContent } from "./store.jsx";
 import { mediaUrl } from "./api.js";
@@ -18,7 +18,7 @@ export function pageMetaFor(entry, docs) {
   if (!entry) return null;
   if (entry.builtin) return pageById(entry.id);
   const d = docs?.[`page:${entry.id}`];
-  return { id: entry.id, path: entry.path, label: d?.meta?.label || entry.label, title: d?.meta?.label || entry.label, description: "" };
+  return { ...customPageMeta(`page:${entry.id}`, d), path: entry.path, label: d?.meta?.label || entry.label, title: d?.meta?.label || entry.label };
 }
 
 /** Collect what an SEO audit needs from a rendered page document. */

@@ -244,6 +244,26 @@ export function normPageSeo(v, { strict = false } = {}) {
 
 // ------------------------------------------------------------------ page
 const SLUG_RE = /^\/[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
+// The website's built-in pages: id -> address. Must match the PAGES registry
+// in frontend/src/cms/pageMeta.js (a test checks it).
+export const BUILTIN_PAGES = {
+  home: "/",
+  products: "/products",
+  hms: "/products/hospitalmanagementsoftware",
+  cms: "/products/clinicalmanagementsoftware",
+  about: "/about",
+  contact: "/contact",
+  privacy: "/privacy-policy",
+  terms: "/terms",
+  thankyou: "/thank-you",
+};
+export const BUILTIN_PATHS = Object.values(BUILTIN_PAGES);
+// Old short addresses that always redirect to a built-in page (BUILTIN_REDIRECTS
+// in pageMeta.js): a page there could never be shown.
+export const BUILTIN_REDIRECT_PATHS = ["/products/hms", "/products/cms", "/his", "/hms", "/cms"];
+/** Is this address taken by the website itself (built-in page or its old address)? */
+export const isBuiltinAddress = (slug) => BUILTIN_PATHS.includes(slug) || BUILTIN_REDIRECT_PATHS.includes(slug);
+
 const RESERVED = ["/admin", "/api", "/uploads", "/assets", "/preview", "/thank-you", "/sitemap.xml", "/robots.txt", "/llms.txt"];
 export function validSlug(slug) {
   const s = String(slug || "").trim().toLowerCase();
@@ -265,7 +285,7 @@ export function normPage(data, opts = {}) {
   if (isObj(d.meta)) {
     if (d.meta.label) out.meta.label = cleanText(d.meta.label, 120).trim();
     if (d.meta.slug) { const s = validSlug(d.meta.slug); if (s) out.meta.slug = s; }
-    if (d.meta.template === "custom") out.meta.template = "custom";
+    if (d.meta.template === "custom" || Object.prototype.hasOwnProperty.call(BUILTIN_PAGES, d.meta.template)) out.meta.template = d.meta.template;
   }
   return out;
 }
