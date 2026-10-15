@@ -49,6 +49,18 @@ export async function createSite({ siteDist, content }) {
   // scripts): SITE_FORM_ACTION="https://example.list-manage.com https://forms.example.com"
   const formAction = ["'self'", ...String(process.env.SITE_FORM_ACTION || "").split(/\s+/).filter((s) => /^https:\/\/[a-z0-9*.-]+(:\d+)?$/i.test(s))].join(" ");
 
+  /**
+   * `to` with the visitor's query string kept (utm_* tags, preview tokens),
+   * inserted before any #fragment - unless `to` has a query of its own.
+   */
+  function withQuery(to, req) {
+    const q = req.originalUrl.indexOf("?");
+    if (q < 0) return to;
+    const i = to.indexOf("#");
+    const base = i < 0 ? to : to.slice(0, i);
+    return base.includes("?") ? to : `${base}${req.originalUrl.slice(q)}${i < 0 ? "" : to.slice(i)}`;
+  }
+
   function siteHeaders(req, res) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -122,7 +134,7 @@ export async function createSite({ siteDist, content }) {
             const r = await ssr.render(req.originalUrl, { docs: content.previewDocs(), version: "preview", mode: "preview", previewInfo: { label: found.label, expiresAt: found.exp } });
             res.setHeader("Cache-Control", "no-store");
             res.setHeader("X-Robots-Tag", "noindex, nofollow");
-            if (r.redirect) return res.redirect(302, r.redirect.to);
+            if (r.redirect) return res.redirect(302, withQuery(r.redirect.to, req)); // keeps ?kibo_preview
             return res.status(r.status === 404 ? 404 : 200).type("html").send(inject(r, req.path));
           }
         }
@@ -140,7 +152,7 @@ export async function createSite({ siteDist, content }) {
           if (cache.size > 500) cache.clear();
           cache.set(key, hit);
         }
-        if (hit.location) return res.redirect(hit.status, hit.location);
+        if (hit.location) return res.redirect(hit.status, withQuery(hit.location, req));
         if (hit.status === 410) {
           const nf = await ssr.render("/__kibo-not-found__", { docs: p.docs, version: p.version, fresh: true });
           return res.status(410).type("html").send(inject(nf, "/404"));

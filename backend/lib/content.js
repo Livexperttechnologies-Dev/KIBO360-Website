@@ -158,7 +158,18 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
    * have no liveCode list and no scripts in their site snapshot.
    */
   const usesLiveCode = (s, id) => (Array.isArray(s.liveCode) ? s.liveCode.includes(id) : docType(id) === "site" && !("code" in (s.snapshot?.[id] || {})));
-  const scheduledData = (s, id, pubData) => (usesLiveCode(s, id) ? withLiveCode(s.snapshot?.[id], pubData) : s.snapshot?.[id]);
+  /** Does a schedule publish the page's live address (not its own copy)? Older schedules: main pages yes. */
+  const usesLiveSlug = (s, id) => docType(id) === "page" && (Array.isArray(s.liveSlug) ? s.liveSlug.includes(id) : !id.startsWith("page:c-"));
+  function withLiveSlug(data, pubData) {
+    const meta = { ...(data?.meta || {}) };
+    if (pubData?.meta?.slug) meta.slug = pubData.meta.slug; else delete meta.slug;
+    return { ...data, meta };
+  }
+  function scheduledData(s, id, pubData) {
+    let d = usesLiveCode(s, id) ? withLiveCode(s.snapshot?.[id], pubData) : s.snapshot?.[id];
+    if (d && usesLiveSlug(s, id)) d = withLiveSlug(d, pubData);
+    return d;
+  }
   /** Does section `k` differ between two versions? (scripts: empty == none) */
   const sectionDiffers = (k, a, b) => (k === "code" ? codeChanged(a, b) : !same(a?.[k], b?.[k]));
   const ONLY_SCRIPTS = "Only header & footer script changes are waiting - someone with the scripts permission has to publish them";
@@ -176,14 +187,17 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         const errors = analyzeRedirects(clean.redirects).filter((i) => i.level === "error");
         if (errors.length) throw new ValidationError(`Fix redirect errors before publishing: ${errors[0].message}`, errors);
       }
-      if (docType(docId) === "page" && clean.meta?.slug) {
-        if (docId.startsWith("page:c-") && isBuiltinAddress(clean.meta.slug)) throw new ValidationError(`The URL ${clean.meta.slug} belongs to the website itself - choose another address`);
-        const clash = Object.entries(next.docs).find(([id, d]) => id !== docId && d.data?.meta?.slug === clean.meta.slug);
-        if (clash) throw new ValidationError(`Another page already uses the URL ${clean.meta.slug}`);
+      if (docType(docId) === "page" && clean.meta?.slug && isBuiltinAddress(clean.meta.slug, docId.startsWith("page:c-") ? null : docId.slice(5))) {
+        throw new ValidationError(`The URL ${clean.meta.slug} belongs to the website itself - choose another address`);
       }
       const rev = (pub.docs[docId]?.rev || 0) + 1;
       next.docs[docId] = { data: clean, rev, publishedAt: next.updatedAt, publishedBy: who(user) };
       revs.push({ docId, rev, data: clean });
+    }
+    // every page in the new live set has an address of its own
+    for (const { docId, remove } of entries) {
+      const slug = !remove && docType(docId) === "page" ? next.docs[docId]?.data?.meta?.slug : null;
+      if (slug && Object.entries(next.docs).some(([id, d]) => id !== docId && d.data?.meta?.slug === slug)) throw new ValidationError(`Another page already uses the URL ${slug}`);
     }
     // ---- the atomic switch: one rename replaces the whole live set ----
     store.writeJson(PUB, next, { backup: true });
@@ -330,6 +344,10 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       for (const k of keys) {
         if (!hasAny(req, editPermFor(docId, k))) return res.status(403).json({ ok: false, error: `You don't have permission to edit ${k}` });
       }
+      if (t === "page" && keys.includes("meta") && patch.meta?.slug !== undefined && patch.meta?.slug !== null) {
+        const own = docId.startsWith("page:c-") ? null : BUILTIN_PAGES[docId.slice(5)];
+        if (patch.meta.slug !== own && !validSlug(patch.meta.slug)) return res.status(400).json({ ok: false, error: "Use an address like /landing/page-name - lowercase letters, numbers and dashes, at most 120 characters" });
+      }
       const pub = loadPublished();
       if (t === "page" && docId.startsWith("page:c-") && !pub.docs[docId] && !loadDraft(docId)) {
         return res.status(404).json({ ok: false, error: "This page no longer exists" });
@@ -457,6 +475,10 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       const current = workingData(docId, loadPublished());
       const kept = lockedKeys(req, docId).filter((k) => sectionDiffers(k, r.data, current));
       const restored = keepLocked(req, docId, structuredClone(r.data), current);
+      if (docType(docId) === "page") {
+        restored.meta = { ...(restored.meta || {}) };
+        if (current?.meta?.slug) restored.meta.slug = current.meta.slug; else delete restored.meta.slug;
+      }
       saveDraft(docId, { data: normalizeDoc(docId, restored), rev: (prev?.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: who(req.user), restoredFrom: r.rev });
       audit.log(req, { action: "content.restore_to_draft", target: docId, details: kept.length ? { rev: r.rev, kept } : { rev: r.rev } });
       res.json({ ok: true, kept, status: docStatus(docId) });
@@ -475,6 +497,7 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
       const pub = loadPublished();
       const snapshot = {};
       const liveCode = [];
+      const liveSlug = [];
       const has = (p) => can(req, p);
       for (const docId of ids) {
         const draftData = loadDraft(docId)?.data;
@@ -490,9 +513,11 @@ export function createContent({ store, audit, requireAuth, can, validators = {},
         // Not changing the scripts? Then publish whatever scripts are live
         // when the schedule runs - never roll back a later script publish.
         if (docType(docId) === "site" && !codeChanged(data, pubData)) liveCode.push(docId);
+        // not moving the page? then publish whatever address is live when it runs
+        if (docType(docId) === "page" && (data?.meta?.slug || null) === (pubData?.meta?.slug || null)) liveSlug.push(docId);
       }
       if (!Object.keys(snapshot).length) return res.status(400).json({ ok: false, error: ONLY_SCRIPTS });
-      const s = { id: newId("s_"), docIds: Object.keys(snapshot), at: new Date(at).toISOString(), snapshot, liveCode, note: clampStr(req.body?.note, 200), status: "pending", createdAt: new Date().toISOString(), createdBy: who(req.user) };
+      const s = { id: newId("s_"), docIds: Object.keys(snapshot), at: new Date(at).toISOString(), snapshot, liveCode, liveSlug, note: clampStr(req.body?.note, 200), status: "pending", createdAt: new Date().toISOString(), createdBy: who(req.user) };
       const list = loadSchedules();
       list.push(s);
       saveSchedules(list);

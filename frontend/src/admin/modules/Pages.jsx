@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { siteEntries } from "../../cms/seo.js";
-import { BUILTIN_PATHS } from "../../cms/pageMeta.js";
+import { BUILTIN_PATHS, pagePath } from "../../cms/pageMeta.js";
 import { useAuth } from "../AdminApp.jsx";
 import { useContent } from "../store.jsx";
 import { Alert, Badge, Button, Card, Empty, ErrorBox, Field, I, Input, Modal, PageHead, Spinner, Tabs, timeAgo, useConfirm, useToast } from "../ui.jsx";
@@ -86,6 +86,7 @@ export default function PagesList() {
                       <td>
                         <Link to={`/admin/editor?path=${encodeURIComponent(e.path)}`} className="a-strong" style={{ color: "var(--a-ink)" }}>{e.label}</Link>
                         <div className="a-small a-muted">{e.path}{e.noindex ? " · noindex" : ""}{!e.builtin ? " · landing page" : ""}</div>
+                        {(() => { const live = e.builtin ? pagePath(e.id, store.published) : store.published[docId]?.meta?.slug; return live && live !== e.path ? <div className="a-small" style={{ color: "var(--a-amber)" }}>New address - live at {live} until you publish</div> : null; })()}
                       </td>
                       <td><Badge tone={s.tone}>{s.label}</Badge>{s.changes > 0 && <div className="a-small a-muted">{s.changes} unpublished change{s.changes === 1 ? "" : "s"}</div>}</td>
                       <td className="a-small">{s.st?.draftUpdatedAt ? <>{timeAgo(s.st.draftUpdatedAt)}<div className="a-muted">{s.st.draftUpdatedBy?.name}</div></> : <span className="a-muted">-</span>}</td>
@@ -95,7 +96,7 @@ export default function PagesList() {
                           <Button size="sm" variant="primary" icon="edit" onClick={() => navigate(`/admin/editor?path=${encodeURIComponent(e.path)}`)}>{can("pages.edit") ? "Edit" : "View"}</Button>
                           {s.changes > 0 && can(["pages.publish", "seo.publish"]) && <Button size="sm" icon="send" onClick={() => setPublishing(docId)}>Publish</Button>}
                           {can("pages.create") && <Button size="sm" icon="copy" title="Make a new page with the same design and content" onClick={() => setDuplicating({ docId, label: e.label, path: e.path, builtin: e.builtin })}>Duplicate</Button>}
-                          {(store.published[docId] || e.builtin) && <a className="a-btn a-btn-sm a-btn-ghost" href={e.path} target="_blank" rel="noopener noreferrer" title="Open the live page"><I n="external" size={14} /></a>}
+                          {(store.published[docId] || e.builtin) && <a className="a-btn a-btn-sm a-btn-ghost" href={(e.builtin ? pagePath(e.id, store.published) : store.published[docId]?.meta?.slug) || e.path} target="_blank" rel="noopener noreferrer" title="Open the live page"><I n="external" size={14} /></a>}
                           {!e.builtin && can("pages.create") && (!store.published[docId] || can("pages.publish")) && (
                             <Button size="sm" variant="ghost" icon="trash" aria-label="Delete page" onClick={async () => {
                               const ok = await confirm({ title: `Delete “${e.label}”?`, message: store.published[docId] ? "The page is removed from the live website immediately. Consider adding a redirect for its address in SEO → Redirects." : "The draft page is deleted.", confirmLabel: "Delete page", danger: true });

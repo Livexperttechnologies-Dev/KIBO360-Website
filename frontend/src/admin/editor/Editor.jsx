@@ -6,6 +6,7 @@ import { api, upload } from "../api.js";
 import { Button, I, IconButton, Select, Spinner, Tabs, timeAgo, useConfirm, useNow, useToast, Badge } from "../ui.jsx";
 import { docType, itemAction, sectionAction, setField, setSectionOrder, imageValue, sectionNames } from "../docOps.js";
 import { siteEntries } from "../../cms/seo.js";
+import { pagePath } from "../../cms/pageMeta.js";
 import { BLOCKS } from "../../cms/blocks.jsx";
 import Inspector from "./Inspector.jsx";
 import { Layers, BlockLibrary, PublishDialog, HistoryDialog, PreviewDialog, ChangesList, PageSettings } from "./panels.jsx";
@@ -55,6 +56,20 @@ export default function Editor() {
   const entries = useMemo(() => siteEntries(store?.working || {}), [store?.working]);
   const entry = entries.find((e) => e.path === path) || null;
   const pageDocId = entry ? `page:${entry.id}` : null;
+  // the page's address in the LIVE version (Compare shows that side by side)
+  const livePath = entry ? (entry.builtin ? pagePath(entry.id, store?.published || {}) : store?.published?.[pageDocId]?.meta?.slug || path) : path;
+
+  const lastPage = useRef(null); // { docId, path } of the page that was open
+  useEffect(() => {
+    if (entry) { lastPage.current = { docId: `page:${entry.id}`, path }; return; }
+    const lp = lastPage.current;
+    if (!lp || path !== lp.path) return; // only right after the open page left this address
+    const moved = entries.find((x) => `page:${x.id}` === lp.docId);
+    if (moved && moved.path !== path) {
+      lastPage.current = { docId: lp.docId, path: moved.path };
+      setParams((prev) => { const n = new URLSearchParams(prev); n.set("path", moved.path); return n; }, { replace: true });
+    }
+  }, [entry, entries, path, setParams]);
 
   const [device, setDevice] = useState("desktop");
   const [view, setView] = useState("edit"); // edit | compare | revision
@@ -80,7 +95,7 @@ export default function Editor() {
   // Stable unless a page is added/renamed - a new array on every edit would
   // re-send the whole config (and all documents) to the frame each keystroke.
   const pagesKey = entries.map((e) => `${e.path}|${e.label}`).join(";");
-  const pages = useMemo(() => entries.map((e) => ({ path: e.path, label: e.label })), [pagesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pages = useMemo(() => entries.map((e) => ({ path: e.path, ref: e.builtin ? e.originalPath : e.path, label: e.label })), [pagesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------ docs shown in frames
   const liveDocs = store?.published || {};
@@ -121,13 +136,13 @@ export default function Editor() {
   useEffect(() => {
     if (!ready) return;
     send(frameRef.current, "navigate", { path });
-    if (liveRef.current) send(liveRef.current, "navigate", { path });
+    if (liveRef.current) send(liveRef.current, "navigate", { path: livePath });
     setSel(null);
-  }, [path, ready]);
+  }, [path, livePath, ready]);
 
   // ------------------------------------------------------ latest values
   const latest = useRef({});
-  latest.current = { store, path, pageDocId, canEditPage, canEditSite, view, sel };
+  latest.current = { store, path, livePath, pageDocId, canEditPage, canEditSite, view, sel };
 
   const flushFrame = useCallback(() => new Promise((resolve) => {
     const id = Math.random().toString(36).slice(2);
@@ -251,7 +266,8 @@ export default function Editor() {
         sentRef.current.delete(frame);
         pushDocs(frame, true);
         configure(frame);
-        if (m.path !== latest.current.path) send(frame, "navigate", { path: latest.current.path });
+        const want = frame === live ? latest.current.livePath : latest.current.path;
+        if (m.path !== want) send(frame, "navigate", { path: want });
         if (frame === main) setReady(true);
         return;
       }
@@ -412,7 +428,7 @@ export default function Editor() {
               tabs={[
                 { id: "layers", label: "Sections", icon: "layers" },
                 { id: "seo", label: "SEO", icon: "globe" },
-                entry && !entry.builtin && { id: "page", label: "Page", icon: "settings" },
+                entry && { id: "page", label: "Page", icon: "settings" },
               ]}
             />
           </div>
@@ -421,7 +437,7 @@ export default function Editor() {
             {leftTab === "seo" && pageDocId && (
               <SeoPanel docId={pageDocId} entry={entry} frame={() => frameRef.current} readonly={view !== "edit" || !can(["seo.edit", "pages.edit"])} compact />
             )}
-            {leftTab === "page" && entry && !entry.builtin && <PageSettings ctx={ctx} />}
+            {leftTab === "page" && entry && <PageSettings ctx={ctx} />}
           </div>
         </aside>
 

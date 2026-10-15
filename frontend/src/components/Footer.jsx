@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import Icon from "./Icon.jsx";
-import { useCms, useSite, SiteDoc } from "../cms/content.jsx";
+import { useCms, useSite, SiteDoc, useResolvePath } from "../cms/content.jsx";
 import { useMediaUrl, T } from "../cms/primitives.jsx";
 
 const SOCIAL = [
@@ -12,8 +12,9 @@ const SOCIAL = [
 ];
 
 function FooterLink({ item }) {
+  const resolve = useResolvePath();
   if (!item.href) return <span className="footer-muted">{item.label}</span>;
-  if (item.href.startsWith("/") && !item.href.startsWith("//") && !item.newTab) return <Link to={item.href}>{item.label}</Link>;
+  if (item.href.startsWith("/") && !item.href.startsWith("//") && !item.newTab) return <Link to={resolve(item.href)}>{item.label}</Link>;
   return <a href={item.href} target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noopener noreferrer" : undefined}>{item.label}</a>;
 }
 

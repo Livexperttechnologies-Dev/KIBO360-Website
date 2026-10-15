@@ -1,6 +1,6 @@
 import { Children, cloneElement, isValidElement, useEffect, useLayoutEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { useCms, useField, useScope, useListItems, joinKey, Scope, useSite } from "./content.jsx";
+import { useCms, useField, useScope, useListItems, joinKey, Scope, useSite, useResolvePath } from "./content.jsx";
 import { sanitizeHtml } from "./sanitize.js";
 import { useDemoModal } from "../components/DemoModalContext.jsx";
 import Icon from "../components/Icon.jsx";
@@ -127,6 +127,7 @@ export function Btn({ k, className = "", children, to, href, action, newTab, loo
   const { mode } = useCms();
   const { openDemo } = useDemoModal();
   const { settings } = useSite();
+  const resolve = useResolvePath();
   const b = v && v.t === "btn" ? { label: v.label || defLabel, action: v.action, href: v.href, newTab: v.newTab, style: v.style } : { label: defLabel, action: defAction, href: to || href, newTab, style: look };
   const cls = restyle(className, b.style);
   const editing = mode === "edit" && docId && k;
@@ -141,7 +142,7 @@ export function Btn({ k, className = "", children, to, href, action, newTab, loo
     const num = String(settings.company.whatsapp || "").replace(/\D/g, "");
     return <a className={cls} href={`https://wa.me/${num}`} target="_blank" rel="noopener noreferrer" {...rest} {...edit}>{inner}</a>;
   }
-  const url = b.href;
+  const url = b.action === "link" ? resolve(b.href) : b.href;
   if (b.action === "link" && url.startsWith("/") && !url.startsWith("//") && !b.newTab) {
     return <Link to={url} className={cls} {...rest} {...edit}>{inner}</Link>;
   }

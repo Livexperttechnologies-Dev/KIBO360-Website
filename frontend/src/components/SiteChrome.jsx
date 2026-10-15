@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useCms, useContentSync, useSite } from "../cms/content.jsx";
+import { useCms, useContentSync, useSite, useResolvePath } from "../cms/content.jsx";
 import { sanitizeHtml } from "../cms/sanitize.js";
 import { Btn } from "../cms/primitives.jsx";
 import { captureAttribution, getConsent, setConsent, loadAnalytics, trackPageView, hasAnalytics } from "../cms/tracking.js";
@@ -23,6 +23,7 @@ export function AnnouncementBar() {
   const { banners } = useSite();
   const { mode } = useCms();
   const { pathname } = useLocation();
+  const resolve = useResolvePath(); // banners limited to a page follow it when it moves
   const [dismissed, setDismissed] = useState(() => new Set());
   // Banners with a start/end time depend on "now", which differs between the
   // build/server render and the visitor - so they appear after hydration.
@@ -36,7 +37,7 @@ export function AnnouncementBar() {
     b.enabled && b.html &&
     (!(b.startAt || b.endAt) || mounted) &&
     (!b.startAt || Date.parse(b.startAt) <= now) && (!b.endAt || Date.parse(b.endAt) > now) &&
-    ((b.pages ?? ["*"]).includes("*") || b.pages.includes(pathname)) &&
+    ((b.pages ?? ["*"]).includes("*") || b.pages.some((p) => p === pathname || resolve(p) === pathname)) &&
     !dismissed.has(b.id)
   );
   if (!active.length) return null;
@@ -110,7 +111,8 @@ export function CustomCode() {
   // content is known to be current - code removed or switched off since this
   // page was built must never run. Unreachable API: the page's own copy runs.
   const ready = consent !== undefined && (mode !== "live" || sync === "fresh" || sync === "offline");
-  const list = ready ? activeSnippets(code, { mode, pathname, consentOk }) : null;
+  const resolve = useResolvePath();
+  const list = ready ? activeSnippets(code, { mode, pathname, consentOk, resolve }) : null;
   const signature = list ? list.map(snippetKey).join("|") : null;
   useEffect(() => {
     if (list) syncSnippets(list);

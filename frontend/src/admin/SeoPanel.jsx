@@ -16,7 +16,7 @@ import { MediaPicker } from "./modules/Media.jsx";
 /** Registry entry used by the SEO engine for any page (built-in or custom). */
 export function pageMetaFor(entry, docs) {
   if (!entry) return null;
-  if (entry.builtin) return pageById(entry.id);
+  if (entry.builtin) return { ...pageById(entry.id), path: entry.path };
   const d = docs?.[`page:${entry.id}`];
   return { ...customPageMeta(`page:${entry.id}`, d), path: entry.path, label: d?.meta?.label || entry.label, title: d?.meta?.label || entry.label };
 }
@@ -73,7 +73,7 @@ export default function SeoPanel({ docId, entry, frame, readonly, compact = fals
     const dom = collectDom(doc);
     const entries = siteEntries(docs);
     const all = entries.map((e) => { const pm = pageMetaFor(e, docs); return pm ? computeSeo({ page: pm, docs, path: e.path }) : null; }).filter(Boolean);
-    const res = analyzePage({ seo: { ...seo, jsonLd: dom?.jsonLd?.length ? dom.jsonLd : seo.jsonLd }, dom, path: entry.path, allTitles: all.map((x) => x.title), allDescriptions: all.map((x) => x.description) });
+    const res = analyzePage({ seo: { ...seo, jsonLd: dom?.jsonLd?.length ? dom.jsonLd : seo.jsonLd }, dom, path: entry.path, originalPath: entry.originalPath, allTitles: all.map((x) => x.title), allDescriptions: all.map((x) => x.description) });
     setAudit({ ...res, at: Date.now(), words: dom ? dom.text.split(/\s+/).filter(Boolean).length : null });
   };
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, NavLink, useParams } from "react-router-dom";
 import { siteEntries } from "../../cms/seo.js";
+import { resolvePath } from "../../cms/pageMeta.js";
 import { sanitizeHtml } from "../../cms/sanitize.js";
 import { useAuth } from "../AdminApp.jsx";
 import { useContent } from "../store.jsx";
@@ -96,7 +97,7 @@ export function ButtonFields({ value, onChange, disabled, pages }) {
       {["link", "tel", "mailto"].includes(b.action) && (
         <Field label="Link">
           <Input value={b.href} disabled={disabled} list="site-pages" onChange={(v) => set({ href: v })} placeholder="/contact" />
-          <datalist id="site-pages">{(pages || []).map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}</datalist>
+          <datalist id="site-pages">{(pages || []).map((p) => <option key={p.path} value={p.ref || p.path}>{p.label}</option>)}</datalist>
         </Field>
       )}
       {b.action === "link" && <Check checked={b.newTab} disabled={disabled} onChange={(v) => set({ newTab: v || undefined })} label="Open in a new tab" />}
@@ -110,26 +111,30 @@ export function ButtonFields({ value, onChange, disabled, pages }) {
  * shows when none of the ticked paths is a real page.
  */
 function PagePicker({ value, pages, disabled, onChange, nowhere }) {
+  const store = useContent();
   const list = value || [];
+  const at = (p) => resolvePath(p, store.working); // a moved main page keeps its tick
   const known = new Set(pages.map((p) => p.path));
-  const missing = list.filter((p) => p !== "*" && !known.has(p));
-  const toggle = (path, on) => onChange(on ? [...list, path] : list.filter((x) => x !== path));
+  const missing = list.filter((p) => p !== "*" && !known.has(at(p)));
+  const ticked = (path) => list.some((x) => at(x) === path);
+  const toggle = (page, on) => onChange(on ? [...list, page.ref] : list.filter((x) => x !== page.path && at(x) !== page.path));
   return (
     <div className="a-row">
-      {!list.some((p) => known.has(p)) && (
+      {!list.some((p) => known.has(at(p))) && (
         <span className="a-small" style={{ color: "var(--a-amber)" }}>
           {missing.length ? `The ticked page${missing.length === 1 ? " no longer exists" : "s no longer exist"} - pick a page, ${nowhere}.` : `Pick at least one page - ${nowhere}.`}
         </span>
       )}
-      {pages.map((p) => <Check key={p.path} checked={list.includes(p.path)} disabled={disabled} onChange={(v) => toggle(p.path, v)} label={p.label} />)}
-      {missing.map((path) => <Check key={path} checked disabled={disabled} onChange={(v) => toggle(path, v)} label={`${path} (page not found)`} />)}
+      {pages.map((p) => <Check key={p.path} checked={ticked(p.path)} disabled={disabled} onChange={(v) => toggle(p, v)} label={p.label} />)}
+      {missing.map((path) => <Check key={path} checked disabled={disabled} onChange={(v) => toggle({ path, ref: path }, v)} label={`${path} (page not found)`} />)}
     </div>
   );
 }
 
 function usePages() {
   const store = useContent();
-  return useMemo(() => siteEntries(store.working).map((e) => ({ path: e.path, label: e.label })), [store.working]);
+  // ref: what gets saved - a main page's original address, which always follows the page
+  return useMemo(() => siteEntries(store.working).map((e) => ({ path: e.path, ref: e.builtin ? e.originalPath : e.path, label: e.label })), [store.working]);
 }
 
 // ---------------------------------------------------------- header/footer
@@ -227,7 +232,7 @@ function Menus({ site, set, ro }) {
           ))}
         </div>
       </Card>
-      <datalist id="site-pages-menu">{pages.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}</datalist>
+      <datalist id="site-pages-menu">{pages.map((p) => <option key={p.path} value={p.ref || p.path}>{p.label}</option>)}</datalist>
     </div>
   );
 }

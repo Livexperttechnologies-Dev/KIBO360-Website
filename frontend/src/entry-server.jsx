@@ -15,7 +15,8 @@ export async function render(url, { docs = {}, version = 0, mediaBase = "", mode
   const u = new URL(url, "https://kibo360.in");
   if (mode === "live") {
     const r = matchRedirect(docs, u.pathname);
-    const isPage = BUILTIN_PATHS.includes(u.pathname.replace(/\/+$/, "") || "/") || Object.values(docs).some((d) => d?.meta?.slug === (u.pathname.replace(/\/+$/, "") || "/"));
+    const here = (u.pathname.replace(/\/+$/, "") || "/").toLowerCase();
+    const isPage = siteEntries(docs).some((e) => e.path === here);
     if (r && !isPage) return { status: r.type, redirect: r };
   }
   const handler = createStaticHandler(routes);

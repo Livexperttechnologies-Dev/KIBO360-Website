@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BLOCKS } from "../../cms/blocks.jsx";
-import { BUILTIN_PATHS, BUILTIN_REDIRECTS } from "../../cms/pageMeta.js";
+import { BUILTIN_PATHS, BUILTIN_REDIRECTS, pageById, pagePath } from "../../cms/pageMeta.js";
 import { api } from "../api.js";
 import { useAuth } from "../AdminApp.jsx";
 import { Alert, Badge, Button, Check, CopyButton, Empty, Field, I, IconButton, Input, Modal, Select, Spinner, Tabs, fmtDate, useConfirm, useLoad, useToast } from "../ui.jsx";
@@ -372,13 +372,114 @@ const SLUG_RE = /^\/[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
 const RESERVED = ["/admin", "/api", "/uploads", "/assets", "/preview", "/thank-you", "/sitemap.xml", "/robots.txt", "/llms.txt"];
 export function slugProblem(slug, store, selfId) {
   if (!SLUG_RE.test(slug)) return "Use lowercase letters, numbers and dashes, starting with / (e.g. /landing/hospital-software)";
-  if (RESERVED.some((r) => slug === r || slug.startsWith(`${r}/`)) || BUILTIN_PATHS.includes(slug) || BUILTIN_REDIRECTS.some((r) => r.from === slug)) return "That address is already used by the website";
-  const clash = Object.entries(store.working).find(([id, d]) => id !== selfId && id.startsWith("page:c-") && d?.meta?.slug === slug);
+  if (slug.length > 120) return "Keep the address under 120 characters";
+  // a main page may go back to its original address or use its own old short URL (/hms)
+  const self = selfId && !selfId.startsWith("page:c-") ? pageById(selfId.slice(5)) : null;
+  const own = !!self && (slug === self.path || BUILTIN_REDIRECTS.some((r) => r.from === slug && r.to === self.path));
+  if (!own && (RESERVED.some((r) => slug === r || slug.startsWith(`${r}/`)) || BUILTIN_PATHS.includes(slug) || BUILTIN_REDIRECTS.some((r) => r.from === slug))) return "That address is already used by the website";
+  // other pages' addresses - including main pages that were moved
+  const clash = Object.entries(store.working).find(([id, d]) => id !== selfId && id.startsWith("page:") && d?.meta?.slug === slug);
   if (clash) return "Another page already uses this address";
   return null;
 }
 
+const normAddr = (p) => (String(p || "").replace(/\/+$/, "") || "/").toLowerCase();
+
+/**
+ * SEO redirects when a page moves from the address it is live at (`live`) to
+ * `to` - without loops or chains:
+ *   - a redirect FROM `to` is removed (the page is back at that address)
+ *   - redirects that pointed at `live` now point at `to`
+ *   - if `offer`, the person is asked to add `live` -> `to`
+ * Returns true when that redirect was added.
+ */
+async function redirectsForMove({ store, can, confirm, toast, live, to, label, offer }) {
+  if (!can("seo.edit")) return false;
+  const list = store.working.seo?.redirects || [];
+  const reclaimed = list.some((r) => normAddr(r.from) === normAddr(to));
+  const retarget = live && list.some((r) => normAddr(r.to) === normAddr(live));
+  let add = false;
+  if (offer && live && normAddr(live) !== normAddr(to)) {
+    add = await confirm({ title: "Redirect the previous address?", message: `Visitors and Google know this page as ${live}. Add a permanent (301) redirect from ${live} to ${to}? It goes live when you publish SEO settings.`, confirmLabel: "Add redirect" });
+  }
+  if (!reclaimed && !retarget && !add) return false;
+  store.update("seo", (d) => {
+    const next = (d?.redirects || [])
+      .filter((r) => normAddr(r.from) !== normAddr(to) && (!add || normAddr(r.from) !== normAddr(live)))
+      .map((r) => (live && normAddr(r.to) === normAddr(live) ? { ...r, to } : r));
+    if (add) next.push({ id: `rd_${Math.random().toString(36).slice(2, 10)}`, from: live, to, type: 301, enabled: true, note: `Page moved (${label})` });
+    return { ...d, redirects: next };
+  }, { label: add ? "Add redirect" : "Update redirects" });
+  if (reclaimed) toast(`Removed the old redirect from ${to} - the page is at that address again (publish the SEO settings too)`, { duration: 6000 });
+  return add;
+}
+
 export function PageSettings({ ctx }) {
+  const { store, pageDocId, can } = ctx;
+  const builtin = pageDocId.startsWith("page:c-") ? null : pageById(pageDocId.slice(5));
+  if (builtin) return <BuiltinAddress ctx={ctx} page={builtin} />;
+  return <CustomPageSettings ctx={ctx} />;
+}
+
+/**
+ * Address of a main page. Its original address (and old short URLs) forward
+ * to the new one automatically; Home always stays at "/".
+ */
+function BuiltinAddress({ ctx, page }) {
+  const { store, pageDocId, can } = ctx;
+  const toast = useToast();
+  const current = pagePath(page.id, store.working);
+  const live = pagePath(page.id, store.published);
+  const [slug, setSlug] = useState(current);
+  useEffect(() => { setSlug(current); }, [pageDocId, current]);
+  const ro = !can("pages.edit");
+  const problem = slug !== current ? slugProblem(slug, store, pageDocId) : null;
+  const confirm = useConfirm();
+  const move = async (to) => {
+    if (slugProblem(to, store, pageDocId) || to === current) return;
+    store.update(pageDocId, (d) => {
+      const { slug: _old, ...meta } = d?.meta || {};
+      return { ...(d || {}), meta: to === page.path ? meta : { ...meta, slug: to } };
+    }, { label: "Change page URL" });
+    ctx.goPage(to);
+    // The original address and the page's own short URLs (/hms) always follow
+    // the page by themselves; any other address it is live at needs a redirect.
+    const followsByItself = live === page.path || BUILTIN_REDIRECTS.some((r) => r.from === live && r.to === page.path);
+    const added = await redirectsForMove({ store, can, confirm, toast, live, to, label: page.label, offer: !followsByItself });
+    const after = to === page.path ? "Original address restored - publish to make it live." : `New address saved as a draft - after publishing, ${page.path} forwards to ${to} automatically.`;
+    if (followsByItself || live === to) toast(after, { duration: 6000 });
+    else if (added) toast(`${after} ${live} forwards there once you publish the SEO settings.`, { duration: 7000 });
+    else toast(`${after} The address it is live at now (${live}) stops working after publishing - add a redirect under SEO → Redirects if people use it.`, { tone: "warn", duration: 9000 });
+  };
+  if (page.id === "home") {
+    return (
+      <div className="a-stack">
+        <Field label="Page address (URL)"><Input value="/" disabled /></Field>
+        <Alert tone="info">The home page is always at the website&apos;s main address (kibo360.in/).</Alert>
+      </div>
+    );
+  }
+  return (
+    <div className="a-stack">
+      <Field label="Page address (URL)" error={problem} hint={`Original address: ${page.path}`}>
+        <div className="a-input-group">
+          <Input value={slug} disabled={ro} maxLength={120} aria-label="Page address (URL)" onChange={(v) => setSlug(v.toLowerCase().replace(/\s+/g, "-"))} onKeyDown={(e) => e.key === "Enter" && move(slug)} />
+          <Button disabled={ro || !!problem || slug === current} onClick={() => move(slug)}>Change</Button>
+        </div>
+      </Field>
+      <div className="m-kv">
+        <dt>Live at</dt><dd>{live}</dd>
+        {current !== live && <><dt>After publishing</dt><dd>{current}</dd></>}
+      </div>
+      <Alert tone="info">
+        When the page is at a new address, its old address{page.path !== current ? ` (${page.path})` : ""} forwards visitors and search engines there automatically (permanent 301 redirect). Menu links and buttons that point to the page follow by themselves.
+      </Alert>
+      {current !== page.path && !ro && <Button icon="undo" onClick={() => move(page.path)}>Restore the original address</Button>}
+    </div>
+  );
+}
+
+function CustomPageSettings({ ctx }) {
   const { store, pageDocId, can } = ctx;
   const doc = store.working[pageDocId] || {};
   const published = store.published[pageDocId];
@@ -397,13 +498,7 @@ export function PageSettings({ ctx }) {
     const old = published?.meta?.slug;
     store.update(pageDocId, (d) => ({ ...d, meta: { ...(d.meta || {}), slug } }), { label: "Change page URL" });
     ctx.goPage(slug);
-    if (old && old !== slug && can("seo.edit")) {
-      const ok = await confirm({ title: "Redirect the old address?", message: `Visitors and Google know this page as ${old}. Add a permanent (301) redirect from ${old} to ${slug}? It goes live when you publish SEO settings.`, confirmLabel: "Add redirect" });
-      if (ok) {
-        store.update("seo", (d) => ({ ...d, redirects: [...(d?.redirects || []).filter((r) => r.from !== old), { id: `rd_${Math.random().toString(36).slice(2, 10)}`, from: old, to: slug, type: 301, enabled: true, note: `Page moved (${doc.meta?.label || slug})` }] }), { label: "Add redirect" });
-        toast("Redirect added to the SEO draft");
-      }
-    }
+    if (await redirectsForMove({ store, can, confirm, toast, live: old, to: slug, label: doc.meta?.label || slug, offer: !!old && old !== slug })) toast("Redirect added to the SEO draft");
   };
   return (
     <div className="a-stack">
@@ -412,7 +507,7 @@ export function PageSettings({ ctx }) {
       </Field>
       <Field label="Page address (URL)" error={problem}>
         <div className="a-input-group">
-          <Input value={slug} disabled={ro} onChange={(v) => setSlug(v.toLowerCase().replace(/\s+/g, "-"))} onKeyDown={(e) => e.key === "Enter" && saveSlug()} />
+          <Input value={slug} disabled={ro} maxLength={120} aria-label="Page address (URL)" onChange={(v) => setSlug(v.toLowerCase().replace(/\s+/g, "-"))} onKeyDown={(e) => e.key === "Enter" && saveSlug()} />
           <Button disabled={ro || !!problem || slug === doc.meta?.slug} onClick={saveSlug}>Change</Button>
         </div>
       </Field>

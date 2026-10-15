@@ -1,15 +1,17 @@
 import { Fragment, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import Icon from "./Icon.jsx";
-import { useCms, useSite, SiteDoc } from "../cms/content.jsx";
+import { useCms, useSite, SiteDoc, useResolvePath } from "../cms/content.jsx";
 import { Btn, useMediaUrl } from "../cms/primitives.jsx";
 
 const isInternal = (href) => typeof href === "string" && href.startsWith("/") && !href.startsWith("//");
 
 function MenuLink({ item, onClick, className, children }) {
+  const resolve = useResolvePath();
   if (!item.href) return <span className={className}>{children || item.label}</span>;
   if (isInternal(item.href) && !item.newTab) {
-    return <NavLink to={item.href} end={item.href === "/"} onClick={onClick} className={className}>{children || item.label}</NavLink>;
+    const to = resolve(item.href);
+    return <NavLink to={to} end={to === "/"} onClick={onClick} className={className}>{children || item.label}</NavLink>;
   }
   return <a href={item.href} className={className} target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noopener noreferrer" : undefined} onClick={onClick}>{children || item.label}</a>;
 }

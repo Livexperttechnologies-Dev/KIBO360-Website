@@ -90,8 +90,8 @@ for (const r of effectiveRedirects(docs)) {
 <title>Redirecting…</title>
 <meta name="robots" content="noindex" />
 <link rel="canonical" href="${to.startsWith("/") ? `https://kibo360.in${to}` : to}" />
-<meta http-equiv="refresh" content="0;url=${to}" />
-<script>window.location.replace(${JSON.stringify(r.to)});</script>
+<script>(function(){var t=${JSON.stringify(r.to).replace(/</g, "\\u003c")};var i=t.indexOf("#");var b=i<0?t:t.slice(0,i);var f=i<0?"":t.slice(i);window.location.replace(b+(b.indexOf("?")<0?location.search:"")+(f||location.hash));})();</script>
+<noscript><meta http-equiv="refresh" content="0;url=${to}" /></noscript>
 </head><body><p>This page has moved to <a href="${to}">${to}</a>.</p></body></html>`);
   console.log(`redirect    ${r.from.padEnd(40)} -> ${r.to}`);
 }

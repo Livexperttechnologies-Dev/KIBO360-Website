@@ -5,6 +5,7 @@ import FormRenderer from "../../components/FormRenderer.jsx";
 import { useAuth } from "../AdminApp.jsx";
 import { useContent } from "../store.jsx";
 import { Alert, Badge, Button, Card, Check, Empty, ErrorBox, Field, I, IconButton, Input, PageHead, Select, Spinner, Textarea, Toggle, usePrompt, useConfirm, useToast } from "../ui.jsx";
+import { pagePath } from "../../cms/pageMeta.js";
 import DocBar from "../DocBar.jsx";
 import { docLabel } from "../editor/panels.jsx";
 
@@ -85,7 +86,7 @@ export default function Forms() {
   return (
     <div className="a-page">
       <PageHead title="Form Builder" subtitle="Design the forms on the website. Every submission becomes a lead with its source, UTM campaign and landing page." actions={!ro && <Button variant="primary" icon="plus" onClick={create}>New form</Button>} />
-      <DocBar docIds={["forms"]} previewPath="/contact" />
+      <DocBar docIds={["forms"]} previewPath={pagePath("contact", store?.working || {})} />
       <div className="a-split">
         <div className="a-card" style={{ padding: 8 }}>
           <div className="a-side-list">

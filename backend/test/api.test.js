@@ -844,6 +844,116 @@ describe("duplicate pages", () => {
   });
 });
 
+describe("changing the address of main pages", () => {
+  let superT;
+  const patchMeta = (docId, meta) => call(`/api/admin/content/doc/${encodeURIComponent(docId)}`, { method: "PATCH", token: superT, body: { meta } });
+  const publish = (docIds) => call("/api/admin/content/publish", { method: "POST", token: superT, body: { docIds } });
+  const live = async (docId) => (await call("/api/content/published")).body.docs[docId];
+  before(async () => { superT = await login(ADMIN.email, ADMIN.password); });
+
+  test("a main page can be given a new address (draft until published)", async () => {
+    const r = await patchMeta("page:hms", { slug: "/hospital-software" });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.data.meta.slug, "/hospital-software");
+    assert.notEqual((await live("page:hms"))?.meta?.slug, "/hospital-software", "not live before publishing");
+    assert.equal((await publish(["page:hms"])).status, 200);
+    assert.equal((await live("page:hms")).meta.slug, "/hospital-software");
+  });
+
+  test("Home always stays at / and a page's original address means 'not moved'", async () => {
+    assert.equal((await patchMeta("page:home", { slug: "/start" })).body.data.meta.slug, undefined);
+    assert.equal((await patchMeta("page:about", { slug: "/about" })).body.data.meta.slug, undefined);
+    await call("/api/admin/content/doc/page:home/discard", { method: "POST", token: superT });
+    await call("/api/admin/content/doc/page:about/discard", { method: "POST", token: superT });
+  });
+
+  test("addresses of other pages and other pages' old short URLs are refused", async () => {
+    for (const [docId, slug] of [["page:about", "/contact"], ["page:about", "/products/hospitalmanagementsoftware"], ["page:hms", "/cms"], ["page:about", "/hms"], ["page:about", "/landing/hms-nursing"], ["page:about", "/hospital-software"]]) {
+      await patchMeta(docId, { slug });
+      const p = await publish([docId]);
+      assert.equal(p.status, 400, `${docId} -> ${slug}: ${JSON.stringify(p.body)}`);
+      await call(`/api/admin/content/doc/${encodeURIComponent(docId)}/discard`, { method: "POST", token: superT });
+    }
+    // its own old short URL is fine: HMS at /hms
+    await patchMeta("page:hms", { slug: "/hms" });
+    assert.equal((await publish(["page:hms"])).status, 200);
+    assert.equal((await live("page:hms")).meta.slug, "/hms");
+  });
+
+  test("new pages can't take a moved page's new address, nor its original one", async () => {
+    for (const slug of ["/hms", "/products/hospitalmanagementsoftware"]) {
+      assert.equal((await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "x", slug } })).status, 400, slug);
+      assert.equal((await call("/api/admin/content/pages/page%3Aabout/duplicate", { method: "POST", token: superT, body: { label: "x", slug } })).status, 400, slug);
+    }
+  });
+
+  test("an address the server can't use is refused, not silently dropped", async () => {
+    for (const slug of [`/${"a".repeat(125)}`, "/Bad Address", "no-slash"]) {
+      const r = await patchMeta("page:about", { slug });
+      assert.equal(r.status, 400, slug);
+    }
+    // a page's own original address is always fine (Thank You's is otherwise reserved)
+    const ty = await patchMeta("page:thankyou", { slug: "/thank-you" });
+    assert.equal(ty.status, 200, JSON.stringify(ty.body));
+    assert.equal(ty.body.data.meta.slug, undefined);
+    await call("/api/admin/content/doc/page:thankyou/discard", { method: "POST", token: superT });
+  });
+
+  test("two pages can swap addresses in one publish, in any order", async () => {
+    const a = await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "Swap A", slug: "/landing/swap-a" } });
+    const b = await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "Swap B", slug: "/landing/swap-b" } });
+    assert.equal((await publish([a.body.docId, b.body.docId])).status, 200);
+    await patchMeta(a.body.docId, { label: "Swap A", slug: "/landing/swap-b" });
+    await patchMeta(b.body.docId, { label: "Swap B", slug: "/landing/swap-a" });
+    const p = await publish([a.body.docId, b.body.docId]);
+    assert.equal(p.status, 200, JSON.stringify(p.body));
+    assert.equal((await live(a.body.docId)).meta.slug, "/landing/swap-b");
+    assert.equal((await live(b.body.docId)).meta.slug, "/landing/swap-a");
+    // two pages can't end up at one address
+    await patchMeta(a.body.docId, { label: "Swap A", slug: "/landing/swap-a" });
+    assert.equal((await publish([b.body.docId, a.body.docId])).status, 400);
+    await call(`/api/admin/content/doc/${encodeURIComponent(a.body.docId)}/discard`, { method: "POST", token: superT });
+  });
+
+  test("restoring an old version keeps the page at its current address", async () => {
+    await patchMeta("page:privacy", { slug: "/privacy" });
+    assert.equal((await publish(["page:privacy"])).status, 200);
+    const revs = (await call("/api/admin/content/doc/page:privacy/revisions", { token: superT })).body.revisions;
+    const r = await call("/api/admin/content/doc/page:privacy/restore", { method: "POST", token: superT, body: { rev: revs[revs.length - 1].rev } });
+    assert.equal(r.status, 200);
+    const d = (await call("/api/admin/content/doc/page:privacy", { token: superT })).body;
+    assert.equal(d.data.meta.slug, "/privacy", "the address is changed in Page settings, not by a restore");
+    await call("/api/admin/content/doc/page:privacy/discard", { method: "POST", token: superT });
+  });
+
+  test("a schedule keeps the page at the address that is live when it runs", async () => {
+    await call("/api/admin/content/doc/page:privacy", { method: "PATCH", token: superT, body: { fields: { title: "Privacy (scheduled)" } } });
+    const s = await call("/api/admin/content/schedules", { method: "POST", token: superT, body: { docIds: ["page:privacy"], at: new Date(Date.now() + 61_000).toISOString() } });
+    assert.equal(s.status, 201, JSON.stringify(s.body));
+    // meanwhile the page moves
+    await call("/api/admin/content/doc/page:privacy/discard", { method: "POST", token: superT });
+    await patchMeta("page:privacy", { slug: "/privacy-notice" });
+    assert.equal((await publish(["page:privacy"])).status, 200);
+    const file = path.join(dataDir, "content/schedules.json");
+    const list = JSON.parse(fs.readFileSync(file, "utf8"));
+    list.find((x) => x.id === s.body.schedule.id).at = new Date(Date.now() - 1000).toISOString();
+    fs.writeFileSync(file, JSON.stringify(list));
+    svc.content.runDueSchedules();
+    const p = await live("page:privacy");
+    assert.equal(p.fields.title, "Privacy (scheduled)");
+    assert.equal(p.meta.slug, "/privacy-notice", "the schedule did not move the page back");
+    await patchMeta("page:privacy", {});
+    assert.equal((await publish(["page:privacy"])).status, 200);
+  });
+
+  test("the original address can be restored", async () => {
+    const r = await patchMeta("page:hms", {});
+    assert.equal(r.body.data.meta.slug, undefined);
+    assert.equal((await publish(["page:hms"])).status, 200);
+    assert.equal((await live("page:hms")).meta?.slug, undefined);
+  });
+});
+
 describe("security hardening", () => {
   let superT;
   // creates a user, replaces the temporary password and returns a token

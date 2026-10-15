@@ -166,7 +166,7 @@ function ButtonInspector({ ctx, sel }) {
       {["link", "tel", "mailto"].includes(b.action) && (
         <Field label={hrefLabel} hint={b.action === "link" ? "Pick a page or paste a full web address." : null}>
           <Input value={b.href} disabled={ctx.readonly} list="ed-pages" placeholder={hrefPlaceholder} onChange={(v) => set({ href: v })} />
-          <datalist id="ed-pages">{ctx.pages.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}</datalist>
+          <datalist id="ed-pages">{ctx.pages.map((p) => <option key={p.path} value={p.ref || p.path}>{p.label}</option>)}</datalist>
         </Field>
       )}
       {b.action === "link" && <Check checked={b.newTab} disabled={ctx.readonly} onChange={(v) => set({ newTab: v || undefined })} label="Open in a new tab" />}

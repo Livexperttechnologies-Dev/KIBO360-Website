@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DEFAULT_SITE, DEFAULT_SEO, mergeDefaults } from "./defaults.js";
+import { resolvePath } from "./pageMeta.js";
 import { API_BASE } from "../lib/apiBase.js";
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,11 @@ function useLiveRefresh(mode, version, setDocs, setSync) {
 export const useContentSync = () => useContext(SyncCtx);
 
 export const useCms = () => useContext(CmsCtx);
+/** href -> the linked page's current address (pages can be moved in Super Admin). */
+export function useResolvePath() {
+  const { docs } = useContext(CmsCtx);
+  return useCallback((href) => resolvePath(href, docs), [docs]);
+}
 export const useScope = () => useContext(ScopeCtx);
 export const useIsEditing = () => useContext(CmsCtx).mode === "edit";
 

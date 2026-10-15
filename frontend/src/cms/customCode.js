@@ -43,9 +43,11 @@ const locationOf = (s) => (LOCATIONS.includes(s?.location) ? s.location : "head"
 export const snippetKey = (s) => `${s.id}:${hash(`${locationOf(s)}\n${s.code}`)}`;
 
 const normPath = (p) => (String(p || "/").replace(/\/+$/, "") || "/");
-export function snippetMatches(s, pathname) {
+/** `resolve`: maps a stored page address to the page's current one (pages can be moved). */
+export function snippetMatches(s, pathname, resolve = (p) => p) {
   const pages = Array.isArray(s?.pages) ? s.pages : ["*"];
-  return pages.includes("*") || pages.includes(normPath(pathname));
+  const here = normPath(pathname);
+  return pages.includes("*") || pages.some((p) => p === here || resolve(p) === here);
 }
 
 /**
@@ -55,14 +57,14 @@ export function snippetMatches(s, pathname) {
  *              marked "also run on preview links", "edit" never runs code
  *   consentOk  whether consent-gated snippets may run
  */
-export function activeSnippets(snippets, { mode, pathname, consentOk }) {
+export function activeSnippets(snippets, { mode, pathname, consentOk, resolve }) {
   if (mode !== "live" && mode !== "preview") return [];
   const list = (Array.isArray(snippets) ? snippets : []).filter((s) =>
     s && typeof s.id === "string" && typeof s.code === "string" && s.code.trim() &&
     s.enabled !== false &&
     (mode === "live" || s.preview === true) &&
     (s.consent !== "analytics" || consentOk) &&
-    snippetMatches(s, pathname));
+    snippetMatches(s, pathname, resolve));
   return LOCATIONS.flatMap((loc) => list.filter((s) => locationOf(s) === loc));
 }
 

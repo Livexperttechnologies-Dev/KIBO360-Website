@@ -117,3 +117,56 @@ export const BUILTIN_REDIRECTS = [
   { from: "/hms", to: "/products/hospitalmanagementsoftware" },
   { from: "/cms", to: "/products/clinicalmanagementsoftware" },
 ];
+
+// ---------------------------------------------------------------------------
+// Moving built-in pages. Every built-in page except Home can be given a new
+// address in Super Admin (stored as meta.slug in its own document). The old
+// address - and old short URLs like /hms - then forward to the new one.
+// ---------------------------------------------------------------------------
+
+/** Current address of a built-in page in these docs (Home always stays at "/"). */
+export function pagePath(id, docs) {
+  const p = pageById(id);
+  if (!p) return null;
+  const moved = id !== "home" ? docs?.[`page:${id}`]?.meta?.slug : null;
+  return moved || p.path;
+}
+
+/** Built-in pages that live at a new address: [{ id, from, to }] */
+export function movedPages(docs) {
+  return PAGES.map((p) => ({ id: p.id, from: p.path, to: pagePath(p.id, docs) })).filter((m) => m.to !== m.from);
+}
+
+const isLocal = (href) => typeof href === "string" && href.startsWith("/") && !href.startsWith("//");
+const splitHref = (href) => { const [, raw, rest] = href.match(/^([^?#]*)(.*)$/); return [(raw.replace(/\/+$/, "") || "/").toLowerCase(), rest]; };
+
+/**
+ * A main page's original address (or one of its old short URLs) -> where the
+ * page lives now: "/contact#form" -> "/contact-us#form". Anything else is
+ * returned unchanged.
+ */
+export function currentPagePath(href, docs) {
+  if (!isLocal(href)) return href;
+  const [path, rest] = splitHref(href);
+  const legacy = BUILTIN_REDIRECTS.find((r) => r.from === path);
+  const page = PAGES.find((p) => p.path === (legacy ? legacy.to : path));
+  if (!page) return href;
+  const now = pagePath(page.id, docs);
+  return now === path ? href : `${now}${rest}`;
+}
+
+/**
+ * Where a link should point so it reaches its page without a redirect: moved
+ * main pages are followed, and so is one rule from SEO -> Redirects (e.g. an
+ * address a page was moved away from earlier).
+ */
+export function resolvePath(href, docs) {
+  if (!isLocal(href)) return href;
+  const direct = currentPagePath(href, docs);
+  if (direct !== href) return direct;
+  const [path, rest] = splitHref(href);
+  const rule = (docs?.seo?.redirects || []).find((r) => r && r.enabled !== false && !r.invalid && r.type !== 410 && typeof r.from === "string" && r.from.toLowerCase() === path && isLocal(r.to));
+  if (!rule) return href;
+  const [toPath, toRest] = splitHref(rule.to);
+  return `${currentPagePath(toPath, docs)}${toRest || rest}`;
+}

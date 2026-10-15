@@ -258,11 +258,19 @@ export const BUILTIN_PAGES = {
   thankyou: "/thank-you",
 };
 export const BUILTIN_PATHS = Object.values(BUILTIN_PAGES);
-// Old short addresses that always redirect to a built-in page (BUILTIN_REDIRECTS
-// in pageMeta.js): a page there could never be shown.
-export const BUILTIN_REDIRECT_PATHS = ["/products/hms", "/products/cms", "/his", "/hms", "/cms"];
-/** Is this address taken by the website itself (built-in page or its old address)? */
-export const isBuiltinAddress = (slug) => BUILTIN_PATHS.includes(slug) || BUILTIN_REDIRECT_PATHS.includes(slug);
+// Old short addresses -> the built-in page they forward to (BUILTIN_REDIRECTS in
+// pageMeta.js). Only that page may use one as its own (moved) address.
+export const BUILTIN_REDIRECT_PAGES = { "/products/hms": "hms", "/products/cms": "cms", "/his": "hms", "/hms": "hms", "/cms": "cms" };
+export const BUILTIN_REDIRECT_PATHS = Object.keys(BUILTIN_REDIRECT_PAGES);
+/**
+ * Is this address taken by the website itself - a built-in page's original
+ * address (which keeps forwarding when the page moves) or an old short URL?
+ * `forPage`: a built-in page id that may use its own original/short addresses.
+ */
+export function isBuiltinAddress(slug, forPage = null) {
+  if (forPage && (BUILTIN_PAGES[forPage] === slug || BUILTIN_REDIRECT_PAGES[slug] === forPage)) return false;
+  return BUILTIN_PATHS.includes(slug) || BUILTIN_REDIRECT_PATHS.includes(slug);
+}
 
 const RESERVED = ["/admin", "/api", "/uploads", "/assets", "/preview", "/thank-you", "/sitemap.xml", "/robots.txt", "/llms.txt"];
 export function validSlug(slug) {
@@ -627,7 +635,14 @@ export function normForms(data) {
 
 export function normalizeDoc(docId, data, opts = {}) {
   switch (docType(docId)) {
-    case "page": return normPage(data, opts);
+    case "page": {
+      const out = normPage(data, opts);
+      // A built-in page's address (meta.slug = moved in Super Admin): Home
+      // never moves, and its original address means "not moved".
+      const builtin = docId.startsWith("page:c-") ? null : docId.slice(5);
+      if (builtin && out.meta?.slug && (builtin === "home" || out.meta.slug === BUILTIN_PAGES[builtin])) delete out.meta.slug;
+      return out;
+    }
     case "site": return normSite(data);
     case "seo": return normSeoDoc(data);
     case "forms": return normForms(data);

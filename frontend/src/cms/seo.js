@@ -1,4 +1,4 @@
-import { PAGES, BUILTIN_REDIRECTS } from "./pageMeta.js";
+import { PAGES, BUILTIN_REDIRECTS, pagePath, movedPages, currentPagePath } from "./pageMeta.js";
 import { DEFAULT_SEO, DEFAULT_SITE, mergeDefaults } from "./defaults.js";
 
 // ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ export function computeSeo({ page, docs, path, codeJsonLd = null, mediaBase = ""
     jsonLd.push({ "@context": "https://schema.org", "@type": "WebSite", "@id": `${siteUrl}/#website`, url: `${siteUrl}/`, name: brand, publisher: { "@id": orgId }, inLanguage: (g.global.locale || "en_IN").replace("_", "-") });
   }
   const lb = g.schema.localBusiness;
-  if (lb?.enabled && (path === "/" || path === "/contact")) {
+  if (lb?.enabled && (path === "/" || page.id === "contact")) { // the Contact page, wherever it lives
     jsonLd.push({
       "@context": "https://schema.org", "@type": "LocalBusiness", "@id": `${siteUrl}/#localbusiness`, name: org.name || brand, url: `${siteUrl}/`,
       telephone: company.phone || undefined, email: company.email || undefined, image: logo ? mediaAbs(siteUrl, mediaBase, logo) : undefined,
@@ -207,7 +207,7 @@ export function renderHeadHtml(seo) {
 /** All indexable URLs: built-in pages + published custom pages. */
 export function siteEntries(docs) {
   const out = [];
-  for (const p of PAGES) out.push({ id: p.id, path: p.path, label: p.label, builtin: true, noindex: !!p.noindex, sitemap: p.sitemap || {} });
+  for (const p of PAGES) out.push({ id: p.id, path: pagePath(p.id, docs), label: p.label, builtin: true, noindex: !!p.noindex, sitemap: p.sitemap || {}, originalPath: p.path });
   for (const [docId, d] of Object.entries(docs || {})) {
     if (!docId.startsWith("page:c-") || !d?.meta?.slug) continue;
     const tpl = PAGES.find((p) => p.id === d.meta.template); // copy of a built-in page?
@@ -240,7 +240,7 @@ export function buildRobots(docs) {
   const g = mergedSeo(docs);
   const siteUrl = (g.global.siteUrl || "https://kibo360.in").replace(/\/$/, "");
   if (g.robots.mode === "custom" && g.robots.custom.trim()) return g.robots.custom.trim() + "\n";
-  const lines = ["User-agent: *", "Allow: /", "Disallow: /admin", "Disallow: /api/", "Disallow: /*?kibo_preview=", "Disallow: /*?kibo_editor="];
+  const lines = ["User-agent: *", "Allow: /", "Disallow: /admin$", "Disallow: /admin/", "Disallow: /api/", "Disallow: /*?kibo_preview=", "Disallow: /*?kibo_editor="];
   for (const p of g.robots.disallow || []) lines.push(`Disallow: ${p}`);
   if (g.robots.crawlDelay) lines.push(`Crawl-delay: ${g.robots.crawlDelay}`);
   if (g.robots.blockAiTraining) {
@@ -269,12 +269,21 @@ export function buildLlms(docs) {
   return lines.join("\n") + "\n";
 }
 
-/** Effective redirects (CMS + built-in legacy URLs). */
+/**
+ * Effective redirects: CMS redirects, then the automatic ones - the old
+ * address of every page moved in Super Admin, and the legacy short URLs
+ * (which follow their page to its current address).
+ */
 export function effectiveRedirects(docs) {
   const g = mergedSeo(docs);
-  const cms = (g.redirects || []).filter((r) => r.enabled && !r.invalid);
+  // a rule pointing at a moved main page goes straight to its current address (one hop)
+  const cms = (g.redirects || []).filter((r) => r.enabled && !r.invalid).map((r) => (r.type !== 410 && typeof r.to === "string" ? { ...r, to: currentPagePath(r.to, docs) } : r));
   const seen = new Set(cms.map((r) => r.from.toLowerCase()));
-  return [...cms, ...BUILTIN_REDIRECTS.filter((r) => !seen.has(r.from)).map((r) => ({ ...r, type: 301, enabled: true, builtin: true }))];
+  const out = [...cms];
+  const auto = (r) => { if (seen.has(r.from) || r.from === r.to) return; seen.add(r.from); out.push({ ...r, type: 301, enabled: true, builtin: true }); };
+  for (const m of movedPages(docs)) auto({ from: m.from, to: m.to, moved: true });
+  for (const r of BUILTIN_REDIRECTS) { const page = PAGES.find((p) => p.path === r.to); auto({ from: r.from, to: page ? pagePath(page.id, docs) : r.to }); }
+  return out;
 }
 export function matchRedirect(docs, pathname) {
   const p = (pathname.replace(/\/+$/, "") || "/").toLowerCase();
@@ -286,7 +295,8 @@ export function matchRedirect(docs, pathname) {
  * SEO health check for one rendered page.
  * dom: { h1s: [text], headings: [{level,text}], images: [{src, alt}], links: [{href, text, internal}], text }
  */
-export function analyzePage({ seo, dom, path, allTitles = [], allDescriptions = [] }) {
+export function analyzePage({ seo, dom, path, originalPath = null, allTitles = [], allDescriptions = [] }) {
+  const thankYou = (originalPath || path) === "/thank-you"; // the Thank You page, wherever it lives
   const issues = [];
   const add = (level, code, message, weight = 0) => issues.push({ level, code, message, weight });
   const tl = seo.title.length;
@@ -299,7 +309,7 @@ export function analyzePage({ seo, dom, path, allTitles = [], allDescriptions = 
   else if (dl > 160) add("warning", "desc-long", `Meta description is ${dl} chars - it may be cut off after ~160`, 4);
   if (allTitles.filter((t) => t === seo.title).length > 1) add("warning", "title-duplicate", "Another page has the same SEO title", 6);
   if (allDescriptions.filter((d) => d && d === seo.description).length > 1) add("warning", "desc-duplicate", "Another page has the same meta description", 4);
-  if (seo.noindex && path !== "/thank-you") add("warning", "noindex", "Page is set to noindex - it will not appear in search results", 0);
+  if (seo.noindex && !thankYou) add("warning", "noindex", "Page is set to noindex - it will not appear in search results", 0);
   if (!seo.og.image) add("warning", "og-image-missing", "No social share image (Open Graph)", 5);
   else if (seo.og.imageWidth && seo.og.imageWidth < 1200) add("info", "og-image-small", `Social share image is ${seo.og.imageWidth}px wide - 1200×630 looks best on LinkedIn/WhatsApp/X`, 2);
   if (dom) {
@@ -313,9 +323,9 @@ export function analyzePage({ seo, dom, path, allTitles = [], allDescriptions = 
     const noAlt = dom.images.filter((i) => !i.alt && !i.decorative);
     if (noAlt.length) add("warning", "img-alt", `${noAlt.length} image(s) without alt text`, Math.min(8, noAlt.length * 2));
     const words = (dom.text || "").split(/\s+/).filter(Boolean).length;
-    if (words < 250 && path !== "/thank-you") add("warning", "thin-content", `Only ~${words} words of text - thin pages rank poorly`, 5);
+    if (words < 250 && !thankYou) add("warning", "thin-content", `Only ~${words} words of text - thin pages rank poorly`, 5);
     const internal = dom.links.filter((l) => l.internal).length;
-    if (internal < 3 && path !== "/thank-you") add("info", "few-internal-links", `Only ${internal} internal links - link to related pages`, 2);
+    if (internal < 3 && !thankYou) add("info", "few-internal-links", `Only ${internal} internal links - link to related pages`, 2);
     const emptyLinks = dom.links.filter((l) => !l.text && !l.label);
     if (emptyLinks.length) add("warning", "link-text", `${emptyLinks.length} link(s) without descriptive text`, 3);
     const kw = (seo.focusKeyword || "").toLowerCase().trim();

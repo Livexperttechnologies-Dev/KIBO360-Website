@@ -1,10 +1,10 @@
 import { useContext, useEffect, useMemo } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import Seo, { HeadCollectorContext } from "../components/Seo.jsx";
 import { useCms, PageDoc, PageInstance } from "../cms/content.jsx";
 import { Sections } from "../cms/sections.jsx";
 import { matchRedirect } from "../cms/seo.js";
-import { customPageMeta } from "../cms/pageMeta.js";
+import { customPageMeta, pageById, pagePath, PAGES, resolvePath } from "../cms/pageMeta.js";
 import Home from "./Home.jsx";
 import Products from "./Products.jsx";
 import ProductHMS from "./ProductHMS.jsx";
@@ -19,6 +19,34 @@ import ThankYou from "./ThankYou.jsx";
 const TEMPLATES = { home: Home, products: Products, hms: ProductHMS, cms: ProductCMS, about: About, contact: Contact, privacy: PrivacyPolicy, terms: Terms, thankyou: ThankYou };
 
 const norm = (p) => (p.replace(/\/+$/, "") || "/").toLowerCase();
+
+/** Send the visitor to `to` (a permanent redirect when rendered on the server). */
+function Forward({ to }) {
+  const { search, hash } = useLocation();
+  const collector = useContext(HeadCollectorContext);
+  if (collector) { collector.redirect = { to, type: 301 }; return null; }
+  return <Navigate to={`${to}${search}${hash}`} replace />;
+}
+
+/**
+ * A built-in page at its original address. When the page has been given a new
+ * address in Super Admin, its old one forwards there.
+ */
+export function BuiltinPage({ id, children }) {
+  const { docs } = useCms();
+  const to = pagePath(id, docs);
+  return to !== pageById(id).path ? <Forward to={to} /> : children;
+}
+
+/**
+ * An old short URL (/hms, /cms …): forwards to its page's current address -
+ * or shows the page itself if it was moved onto this very address.
+ */
+export function LegacyAddress({ from }) {
+  const { docs } = useCms();
+  const to = resolvePath(from, docs);
+  return to === from ? <DynamicPage /> : <Forward to={to} />;
+}
 
 /** Pages created in Super Admin: block-built landing pages, or copies of a built-in page. */
 function CustomPage({ docId, doc }) {
@@ -76,6 +104,9 @@ export default function DynamicPage() {
   const { docs, mode } = useCms();
   const collector = useContext(HeadCollectorContext);
   const path = norm(pathname);
+  // a built-in page moved to this address in Super Admin
+  const moved = PAGES.find((p) => p.id !== "home" && p.path !== path && pagePath(p.id, docs) === path);
+  if (moved) { const Page = TEMPLATES[moved.id]; return <Page key={moved.id} />; }
   const entry = Object.entries(docs).find(([id, d]) => id.startsWith("page:c-") && d?.meta?.slug === path);
   if (entry) return <CustomPage key={entry[0]} docId={entry[0]} doc={entry[1]} />;
 

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { pageById } from "../cms/pageMeta.js";
+import { pageById, resolvePath } from "../cms/pageMeta.js";
 import { breadcrumbsFor } from "../cms/seo.js";
 import { useCms, usePageInstance } from "../cms/content.jsx";
 
@@ -13,7 +13,7 @@ export default function Breadcrumbs({ page, items: given }) {
   let items = given;
   if (page) {
     const meta = inst ? inst.meta : pageById(page);
-    items = breadcrumbsFor(meta, docs[inst ? inst.docId : `page:${page}`]?.seo || {}).map((c) => ({ label: c.label, to: c.path }));
+    items = breadcrumbsFor(meta, docs[inst ? inst.docId : `page:${page}`]?.seo || {}).map((c) => ({ label: c.label, to: c.path && resolvePath(c.path, docs) }));
   }
   if (!items?.length) return null;
   return (

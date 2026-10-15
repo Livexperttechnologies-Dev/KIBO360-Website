@@ -438,3 +438,4 @@ textarea.a-code:focus { outline: 2px solid var(--a-brand); }
 .a-modal-back:has(> .a-dialog) { z-index: 1900; }
 .a-modal > form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 .a-modal > form > .a-modal-body { overflow-y: auto; min-height: 0; }
+.a-toast.warn { background: #7a4a00; }

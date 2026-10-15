@@ -20,6 +20,47 @@ Nothing a visitor sees changes until someone with publish rights publishes.
   publish leaves the live site untouched). Every publish is kept in
   `content/revisions/` (last 100 per document) and can be restored to a draft.
 
+## Changing a page's address (URL)
+
+Visual editor → open the page → **Page** tab → *Page address (URL)* → **Change**.
+Every page can be moved, except Home, which always stays at `/`.
+
+- **Main pages** (Products, HMS, CMS, About, Contact, Privacy, Terms, Thank You):
+  - The new address is a draft until the page is published.
+  - After that, the original address forwards to the new one with a permanent
+    301 that keeps the query string, so `utm_*` tags survive. The old short
+    URLs (`/hms`, `/his`, `/cms`, `/products/hms`, `/products/cms`) follow
+    the page too.
+  - Menu links, footer links, buttons, breadcrumbs, canonical tags, sitemap,
+    llms.txt and the static build all use the new address.
+  - Banners and header/footer scripts limited to that page keep showing on it.
+  - **Restore the original address** puts the page back.
+  - A page may use its own old short URL (HMS at `/hms`), but never another
+    page's address or another page's old short URL.
+- **Landing pages and copies:** the same field (plus the page name).
+- **Moving a page that is already live at a new address:** when such a page
+  (main or landing) moves again, the editor offers a 301 redirect from the
+  address it was live at. That redirect goes live with the SEO settings.
+  - Moving a page back onto an address it had before removes the old redirect
+    from that address, so no loop is created.
+  - Redirects that pointed at the page's previous address are pointed at the
+    new one, so there are no chains.
+- **Restores and schedules:** restoring an old revision never moves the page;
+  only Page settings change an address. A schedule publishes the address that
+  is live when it runs, unless the schedule itself was made to change it.
+- **Links and redirects follow:** links to an address that has a rule in
+  SEO → Redirects go straight to the target. A rule pointing at a moved main
+  page's original address forwards in one hop. Redirects keep the query string
+  (placed before any `#anchor`), and so do the static build's redirect pages.
+- **Preview links and Compare:** preview links to a page's old address keep
+  the preview open. Compare in the editor shows the live page at its live
+  address next to the draft.
+- **Addresses** are at most 120 characters. robots.txt blocks only Super Admin
+  (`/admin` and `/admin/…`), so pages like `/administration` stay crawlable.
+- **Where checks happen:** the server checks addresses again on publish, so an
+  address that clashes with another live page, or belongs to the website
+  itself, can't go live.
+
 ## Duplicating a page
 
 Pages & Content → **Duplicate** (or **Duplicate this page** in the visual

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
-import { BUILTIN_REDIRECTS } from "../../cms/pageMeta.js";
 import { analyzePage, buildLlms, buildRobots, buildSitemap, computeSeo, effectiveRedirects, matchRedirect, mergedSeo, siteEntries } from "../../cms/seo.js";
 import { api, mediaUrl } from "../api.js";
 import { useAuth } from "../AdminApp.jsx";
@@ -112,7 +111,7 @@ async function scanSite({ entries, docs, onProgress }) {
       const dom = collectDom(frame.contentDocument);
       const seo = all[i];
       if (!seo) continue;
-      const res = analyzePage({ seo: { ...seo, jsonLd: dom?.jsonLd?.length ? dom.jsonLd : seo.jsonLd }, dom, path: e.path, allTitles: titles, allDescriptions: descs });
+      const res = analyzePage({ seo: { ...seo, jsonLd: dom?.jsonLd?.length ? dom.jsonLd : seo.jsonLd }, dom, path: e.path, originalPath: e.originalPath, allTitles: titles, allDescriptions: descs });
       results.push({ entry: e, docId: `page:${e.id}`, seo, dom, ...res });
     }
   } finally {
@@ -325,7 +324,8 @@ function Redirects({ ro }) {
   const [test, setTest] = useState("");
   const [bulk, setBulk] = useState(null);
   const [q, setQ] = useState("");
-  const known = useMemo(() => [...siteEntries(store.working).map((e) => e.path), ...BUILTIN_REDIRECTS.map((r) => r.from)], [store.working]);
+  const auto = useMemo(() => effectiveRedirects(store.working).filter((r) => r.builtin), [store.working]);
+  const known = useMemo(() => [...siteEntries(store.working).map((e) => e.path), ...auto.map((r) => r.from)], [store.working, auto]);
   const save = (next, label = "Edit redirects") => set("redirects", next, label);
   const upd = (id, patch) => save(list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
@@ -396,8 +396,8 @@ function Redirects({ ro }) {
           <Field hint="Type a path to see what happens when someone visits it."><Input value={test} onChange={setTest} placeholder="/products/hms" /></Field>
           {test.trim() && (hit ? <Alert tone="ok">{hit.type === 410 ? "Returns 410 Gone" : <>Redirects ({hit.type}) to <code>{hit.to}</code></>}</Alert> : known.includes(test.trim()) ? <Alert tone="info">This is a page - no redirect.</Alert> : <Alert tone="warn">No redirect - visitors would see the 404 page.</Alert>)}
         </Card>
-        <Card title="Built-in redirects" subtitle="Short and old addresses that always work.">
-          {BUILTIN_REDIRECTS.map((r) => <div key={r.from} className="a-list-row a-small"><code>{r.from}</code><I n="chevronRight" size={12} /><code>{r.to}</code><Badge tone="gray">301</Badge></div>)}
+        <Card title="Automatic redirects" subtitle="Short and old addresses that always work - including the old address of every main page you moved (Visual editor → Page).">
+          {auto.map((r) => <div key={r.from} className="a-list-row a-small"><code>{r.from}</code><I n="chevronRight" size={12} /><code>{r.to}</code><Badge tone="gray">301</Badge>{r.moved && <Badge tone="violet">page moved</Badge>}</div>)}
         </Card>
       </div>
       {bulk !== null && (
