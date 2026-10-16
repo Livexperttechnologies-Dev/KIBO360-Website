@@ -14,6 +14,7 @@ import { createChat } from "./lib/chat.js";
 import { createSeoTools } from "./lib/seoTools.js";
 import { apiSecurityHeaders } from "./lib/security.js";
 import { checkStorage, reportStorage } from "./lib/storageCheck.js";
+import { deployHookFromEnv } from "./lib/deployHook.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,10 +39,11 @@ export async function createApp({
 
   let site = null; // SSR site server, attached below when a build is present
   let staticSite = null; // static website files kept current (STATIC_SITE_DIR)
+  const deployHook = deployHookFromEnv(); // rebuild a separately hosted website (SITE_DEPLOY_HOOK)
   const content = createContent({
     store, audit, requireAuth, can,
     validators: { defaultForms },
-    onPublish: (next, docIds) => { site?.invalidate(next, docIds); staticSite?.schedule(`publish v${next.version}`); },
+    onPublish: (next, docIds) => { site?.invalidate(next, docIds); staticSite?.schedule(`publish v${next.version}`); deployHook?.schedule(`v${next.version}`); },
     permissionsOf: auth.permissionsOf,
   });
   const settings = createSettings({ store, audit, requireAuth });
@@ -107,6 +109,7 @@ export async function createApp({
       storage: can(req, "users.manage") ? { persistent: storage.persistent, insideApp: storage.insideApp, inContainer: storage.inContainer, dataDir: storage.dataDir } : null,
       // static hosting: are the website files kept current? (STATIC_SITE_DIR)
       staticSite: staticSite ? { ...staticSite.status } : null,
+      deployHook: deployHook ? { ...deployHook.status } : null,
       content: {
         publishedPages: pages.filter((p) => p.published).length,
         customPages: pages.filter((p) => p.docId.startsWith("page:c-")).length,
@@ -158,6 +161,6 @@ export async function createApp({
     res.status(status).json({ ok: false, error: status >= 500 ? (err.code === "ECORRUPT" ? err.message : "Something went wrong on our side") : err.message });
   });
 
-  const close = () => { content.stop(); chat.stop(); staticSite?.close(); };
+  const close = () => { content.stop(); chat.stop(); staticSite?.close(); deployHook?.close(); };
   return { app, services: { store, audit, auth, content, media, settings, forms, chat, staticSite }, close, hasSite: !!site };
 }

@@ -55,6 +55,9 @@ export default function Dashboard() {
       {d.storage?.persistent && d.storage.insideApp && !d.storage.inContainer && (
         <Alert tone="warn">Content is stored inside the app folder ({d.storage.dataDir}). A deploy that replaces the whole app folder deletes all drafts, pages, images and leads - your developer should keep this folder or move it with DATA_DIR.</Alert>
       )}
+      {d.deployHook?.lastError && (
+        <Alert tone="error">The website could not be rebuilt after the last publish, so page source and link previews may still show old text: {d.deployHook.lastError}. Ask your developer to check SITE_DEPLOY_HOOK.</Alert>
+      )}
       {d.staticSite?.lastError && (
         <Alert tone="error">The website files could not be updated after the last publish, so page source and link previews may still show old text: {d.staticSite.lastError}. Ask your developer to check the server (STATIC_SITE_DIR).</Alert>
       )}

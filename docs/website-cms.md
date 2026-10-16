@@ -180,7 +180,38 @@ changes (a new temporary one is printed in the server log).
   data to a folder outside the app, e.g. `/var/lib/kibo360`, and set
   `DATA_DIR` to it.
 
-The backend checks this at every start. If the data folder is inside a container
+### Dokploy (how kibo360.in is deployed)
+
+Backend app:
+
+1. **Advanced → Volumes/Mounts → Volume Mount**:
+   - Volume Name `kibo360-data`
+   - Mount Path `/data`
+2. **Environment**:
+   - `DATA_DIR=/data`
+   - `KIBO_ADMIN_PASSWORD=<a strong temporary password>` - used only while the
+     data folder is still empty; it must be changed at first sign-in.
+
+   Save.
+3. **Deploy.** From now on pushes keep all content and the password. The log
+   shows `[storage] content is stored in /data (persistent volume at /data)`.
+
+Website app (static, served by Caddy):
+
+4. **Environment**: `CONTENT_API=https://api.kibo360.in`, so every build bakes
+   the published titles and descriptions into the HTML. The build log should
+   show `content: vN from https://api.kibo360.in`, not "CONTENT_API not set".
+5. **Deployments**: copy the **Webhook URL**.
+
+Back in the backend app:
+
+6. **Environment**: `SITE_DEPLOY_HOOK=<that webhook URL>` and
+   `SITE_DEPLOY_BRANCH=<the website app's branch, e.g. main>`, then **Deploy**.
+   Publishing in Super Admin now rebuilds the website about 15 seconds later
+   (at most once a minute). "View page source" and link previews follow within
+   a minute or two. If the rebuild request fails, the dashboard says so.
+
+The backend checks storage at every start. If the data folder is inside a container
 without a volume, the log prints a large warning, and the Super Admin dashboard
 shows "Your content will be erased on the next deploy" to people who manage the
 team.

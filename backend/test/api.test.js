@@ -1041,6 +1041,77 @@ describe("content storage survives deploys", () => {
   });
 });
 
+describe("website rebuild after publishing (SITE_DEPLOY_HOOK)", () => {
+  let createDeployHook, deployHookFromEnv, hookSrv, hookUrl;
+  const hits = [];
+  let answer = 200;
+  before(async () => {
+    ({ createDeployHook, deployHookFromEnv } = await import("../lib/deployHook.js"));
+    const http = await import("node:http");
+    hookSrv = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => { hits.push({ headers: req.headers, body: JSON.parse(body || "{}") }); res.writeHead(answer); res.end(answer === 200 ? "ok" : "Branch Not Match"); });
+    });
+    await new Promise((r) => hookSrv.listen(0, r));
+    hookUrl = `http://localhost:${hookSrv.address().port}/api/deploy/token123`;
+  });
+  after(() => hookSrv?.close());
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  test("publishes in quick succession ask for one rebuild, shaped like a git push of the branch", async () => {
+    hits.length = 0;
+    const hook = createDeployHook({ url: hookUrl, branch: "production", delay: 80, minGap: 0, log: () => {} });
+    hook.schedule("v7"); hook.schedule("v8"); hook.schedule("v9");
+    assert.equal(hook.status.pending, true);
+    await wait(400);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].headers["x-github-event"], "push");
+    assert.equal(hits[0].body.ref, "refs/heads/production");
+    assert.match(hits[0].body.head_commit.message, /v9/);
+    assert.equal(hook.status.lastError, null);
+    assert.equal(hook.status.pending, false);
+    hook.close();
+  });
+
+  test("never more than one rebuild per minimum gap", async () => {
+    hits.length = 0;
+    const hook = createDeployHook({ url: hookUrl, delay: 10, minGap: 500, log: () => {} });
+    hook.schedule("a");
+    await wait(150);
+    hook.schedule("b");
+    await wait(150);
+    assert.equal(hits.length, 1, "the second waits for the gap");
+    await wait(500);
+    assert.equal(hits.length, 2);
+    hook.close();
+  });
+
+  test("a refused rebuild is recorded for the dashboard", async () => {
+    answer = 301;
+    const hook = createDeployHook({ url: hookUrl, delay: 10, minGap: 0, log: () => {} });
+    hook.schedule("v10");
+    await wait(300);
+    assert.match(hook.status.lastError, /301/);
+    answer = 200;
+    hook.close();
+  });
+
+  test("custom body and headers (e.g. a deploy API with an API key)", async () => {
+    hits.length = 0;
+    const hook = deployHookFromEnv({ SITE_DEPLOY_HOOK: hookUrl, SITE_DEPLOY_HOOK_HEADERS: '{"x-api-key":"k1"}', SITE_DEPLOY_HOOK_BODY: '{"applicationId":"app1"}' });
+    hook.schedule("v11");
+    await wait(15_300);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].headers["x-api-key"], "k1");
+    assert.deepEqual(hits[0].body, { applicationId: "app1" });
+    assert.equal(hits[0].headers["x-github-event"], undefined);
+    hook.close();
+    assert.equal(deployHookFromEnv({}), null);
+    assert.equal(deployHookFromEnv({ SITE_DEPLOY_HOOK: "javascript:alert(1)" }), null);
+  });
+});
+
 describe("security hardening", () => {
   let superT;
   // creates a user, replaces the temporary password and returns a token
