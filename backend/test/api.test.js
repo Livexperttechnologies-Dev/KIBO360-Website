@@ -1105,6 +1105,31 @@ describe("content storage survives deploys", () => {
     assert.equal(h.body.storage === "persistent", d.body.storage.persistent);
     assert.equal(d.body.storage.database, false);
   });
+  test("/api/health says why content would be erased, so the hosting setup can be checked from outside", () => {
+    const { storageHealth, withVolumes, storageFix } = storageMod;
+    // DATA_DIR=/data but no volume attached to this container (volumes are scanned
+    // at start-up even when DATA_DIR decided, as app.js does)
+    const bare = sys({ container: true, mounts: BASE });
+    const noVolume = withVolumes(chooseDataDir({ envDir: "/data", defaultDir: "/app/data", appDir: "/app", sys: bare }), bare);
+    assert.deepEqual(storageHealth(checkStorage(noVolume.dir, "/app", bare), noVolume), {
+      storage: "temporary",
+      storageDetail: { dataDir: "/data", dataDirFrom: "DATA_DIR", volumesSeen: [] },
+    });
+    // DATA_DIR=/app/data while the volume is mounted at /data: the mismatch is visible and named
+    const vol = sys({ container: true, mounts: [...BASE, "/data"] });
+    const mismatch = withVolumes(chooseDataDir({ envDir: "/app/data", defaultDir: "/app/data", appDir: "/app", sys: vol }), vol);
+    const mismatchStorage = checkStorage(mismatch.dir, "/app", vol);
+    assert.deepEqual(storageHealth(mismatchStorage, mismatch).storageDetail, { dataDir: "/app/data", dataDirFrom: "DATA_DIR", volumesSeen: ["/data"] });
+    assert.match(storageFix(mismatchStorage, mismatch), /DATA_DIR is \/app\/data, but the volume is mounted at \/data: set DATA_DIR to the volume's mount path/);
+    // no DATA_DIR, only the PostgreSQL volume attached
+    const pgOnly = choose({ mounts: [...BASE, "/var/lib/postgresql/18/docker"] });
+    assert.deepEqual(storageHealth(checkStorage(pgOnly.dir, "/app", sys({ container: true, mounts: BASE })), pgOnly).storageDetail, {
+      dataDir: "/app/data", dataDirFrom: "default", volumesSeen: ["/var/lib/postgresql/18/docker (a database's own data folder)"],
+    });
+    // working: no detail at all
+    const ok = choose({ mounts: [...BASE, "/data"] });
+    assert.deepEqual(storageHealth(checkStorage(ok.dir, "/app", sys({ container: true, mounts: [...BASE, "/data"] })), ok), { storage: "persistent" });
+  });
   test("the fix advice matches the setup (DATA_DIR set or not)", () => {
     const { storageFix, reportStorage } = storageMod;
     const temp = checkStorage("/srv/content", "/app", sys({ container: true, mounts: BASE }));

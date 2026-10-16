@@ -13,7 +13,7 @@ import { createForms, defaultForms } from "./lib/forms.js";
 import { createChat } from "./lib/chat.js";
 import { createSeoTools } from "./lib/seoTools.js";
 import { apiSecurityHeaders } from "./lib/security.js";
-import { checkStorage, reportStorage, chooseDataDir, storageFix } from "./lib/storageCheck.js";
+import { checkStorage, reportStorage, chooseDataDir, storageFix, storageHealth, withVolumes } from "./lib/storageCheck.js";
 import { deployHookFromEnv } from "./lib/deployHook.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,7 +29,7 @@ export async function createApp({
   staticSiteDir = process.env.STATIC_SITE_DIR || null,
   origins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
 } = {}) {
-  const chosen = dataDir ? { dir: dataDir, from: "option" } : chooseDataDir({ envDir: process.env.DATA_DIR, defaultDir: path.join(__dirname, "data"), appDir: __dirname });
+  const chosen = withVolumes(dataDir ? { dir: dataDir, from: "option" } : chooseDataDir({ envDir: process.env.DATA_DIR, defaultDir: path.join(__dirname, "data"), appDir: __dirname }));
   dataDir = chosen.dir;
   const store = createStore(dataDir);
   // will the content survive the next deploy? (reported loudly if not)
@@ -76,10 +76,8 @@ export async function createApp({
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, service: "kibo360-backend", time: new Date().toISOString(), contentVersion: content.loadPublished().version || 0,
-      // "temporary" = content is erased by the next deploy (no volume)
-      storage: storage.persistent ? "persistent" : "temporary",
-      // kept, but inside a database's own volume - the backend needs its own
-      ...(storage.database ? { storageWarning: "database-volume" } : {}) });
+      // "temporary" = content is erased by the next deploy (no volume) - with the reason
+      ...storageHealth(storage, chosen) });
   });
 
   auth.registerRoutes(app);

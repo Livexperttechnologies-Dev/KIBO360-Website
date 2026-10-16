@@ -319,6 +319,7 @@ export function analyzePage({ seo, dom, path, originalPath = null, allTitles = [
     for (const h of dom.headings) {
       if (h.level > prev + 1) { add("info", "heading-skip", `Heading level jumps from H${prev} to H${h.level} ("${h.text.slice(0, 40)}")`, 1); break; }
       prev = h.level;
+      
     }
     const noAlt = dom.images.filter((i) => !i.alt && !i.decorative);
     if (noAlt.length) add("warning", "img-alt", `${noAlt.length} image(s) without alt text`, Math.min(8, noAlt.length * 2));

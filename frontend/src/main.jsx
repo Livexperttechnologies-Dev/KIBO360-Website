@@ -4,7 +4,11 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import routes from "./routes.jsx";
 import { ContentProvider } from "./cms/content.jsx";
 import { API_BASE } from "./lib/apiBase.js";
+import { watchForNewVersion } from "./lib/newVersion.js";
 import "./styles/global.css";
+
+// a tab opened before a deploy reloads instead of failing on replaced files
+watchForNewVersion();
 
 const container = document.getElementById("root");
 const params = new URLSearchParams(window.location.search);

@@ -97,10 +97,40 @@ export function chooseDataDir({ envDir, defaultDir, appDir, sys = realSys }) {
   return { dir: defaultDir, from: "default", volumes, skipped };
 }
 
+/**
+ * `chosen` plus the volumes this container has - also when DATA_DIR decided
+ * (then no scan ran), so a DATA_DIR that misses the volume's mount path is
+ * reported as exactly that, not as "no volume". Run once at start-up.
+ */
+export function withVolumes(chosen, sys = realSys) {
+  if (chosen.volumes) return chosen;
+  const { usable, skipped } = volumeMounts(sys);
+  return { ...chosen, volumes: usable, skipped };
+}
+
+/**
+ * The storage part of the public /api/health answer. When content would be
+ * erased by the next deploy it also says why (folder, whether DATA_DIR is set,
+ * the volumes seen), so the hosting setup can be checked from outside.
+ */
+export function storageHealth(s, chosen = {}) {
+  const out = { storage: s.persistent ? "persistent" : "temporary" };
+  if (s.database) out.storageWarning = "database-volume"; // kept, but inside a database's own volume
+  if (!s.persistent) {
+    out.storageDetail = {
+      dataDir: s.dataDir,
+      dataDirFrom: chosen.from === "option" ? "DATA_DIR" : chosen.from || "default",
+      volumesSeen: [...(chosen.volumes || []), ...(chosen.skipped || []).map((v) => `${v.point} (${v.why})`)],
+    };
+  }
+  return out;
+}
+
 /** How to fix storage that is erased on the next deploy, for this setup. */
 export function storageFix(s, chosen = {}) {
   if (chosen.from === "DATA_DIR" || chosen.from === "option") {
     // DATA_DIR wins over any volume, so the volume must be mounted exactly there
+    if (chosen.volumes?.length) return `DATA_DIR is ${s.dataDir}, but the volume is mounted at ${chosen.volumes.join(", ")}: set DATA_DIR to the volume's mount path (or remove DATA_DIR), then redeploy.`;
     return `DATA_DIR is ${s.dataDir}: mount the backend's volume at exactly that path, or change DATA_DIR to the volume's mount path.`;
   }
   if (chosen.volumes?.length) return `Several volumes are mounted (${chosen.volumes.join(", ")}) - set DATA_DIR to the one for content.`;

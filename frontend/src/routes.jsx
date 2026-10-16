@@ -12,6 +12,7 @@ import ThankYou from "./pages/ThankYou.jsx";
 import DynamicPage, { BuiltinPage, LegacyAddress } from "./pages/DynamicPage.jsx";
 import { BUILTIN_REDIRECTS } from "./cms/pageMeta.js";
 import { pageBoot } from "./lib/pageBoot.js";
+import RouteError from "./components/RouteError.jsx";
 
 // (a main page's original address forwards to its new one once it is moved in Super Admin)
 const at = (id, page) => <BuiltinPage id={id}>{page}</BuiltinPage>;
@@ -38,10 +39,11 @@ function AdminShell() {
 // Shared by the browser entry (main.jsx) and the server renderer
 // (entry-server.jsx) so both always agree on the route table.
 const routes = [
-  { path: "/admin/*", element: <AdminShell /> },
+  { path: "/admin/*", element: <AdminShell />, errorElement: <RouteError /> },
   {
     path: "/",
     element: <App />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
       { path: "products", element: at("products", <Products />) },
