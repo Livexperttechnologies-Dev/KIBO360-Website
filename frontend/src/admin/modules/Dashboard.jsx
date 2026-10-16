@@ -49,6 +49,12 @@ export default function Dashboard() {
           </>
         }
       />
+      {d.storage && !d.storage.persistent && (
+        <Alert tone="error"><strong>Your content will be erased on the next deploy.</strong> Drafts, published pages, SEO settings, images, leads and accounts are stored inside the app container ({d.storage.dataDir}), and every deploy starts a new, empty one. Ask your developer to add persistent storage (a volume) for that folder in the hosting panel before the next deploy.</Alert>
+      )}
+      {d.storage?.persistent && d.storage.insideApp && !d.storage.inContainer && (
+        <Alert tone="warn">Content is stored inside the app folder ({d.storage.dataDir}). A deploy that replaces the whole app folder deletes all drafts, pages, images and leads - your developer should keep this folder or move it with DATA_DIR.</Alert>
+      )}
       {d.staticSite?.lastError && (
         <Alert tone="error">The website files could not be updated after the last publish, so page source and link previews may still show old text: {d.staticSite.lastError}. Ask your developer to check the server (STATIC_SITE_DIR).</Alert>
       )}

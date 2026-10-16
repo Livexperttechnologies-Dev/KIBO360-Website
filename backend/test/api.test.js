@@ -1007,6 +1007,40 @@ describe("static website files follow publishes (static hosting)", () => {
   });
 });
 
+describe("content storage survives deploys", () => {
+  const sys = ({ container, mounts }) => ({
+    platform: "linux",
+    exists: (f) => container && f === "/.dockerenv",
+    read: (f) => (f === "/proc/self/mountinfo" ? mounts.map((m, i) => `${i} 1 0:1 / ${m} rw - overlay x rw`).join("\n") : ""),
+    realpath: (p) => p,
+  });
+  let checkStorage;
+  before(async () => { ({ checkStorage } = await import("../lib/storageCheck.js")); });
+
+  test("data inside a container without a volume is reported as erased on the next deploy", () => {
+    const s = checkStorage("/app/backend/data", "/app/backend", sys({ container: true, mounts: ["/", "/proc", "/etc/hosts"] }));
+    assert.equal(s.persistent, false);
+  });
+  test("a mounted volume (at the data folder or via DATA_DIR) is persistent", () => {
+    assert.equal(checkStorage("/app/backend/data", "/app/backend", sys({ container: true, mounts: ["/", "/app/backend/data"] })).persistent, true);
+    const viaEnv = checkStorage("/data/kibo", "/app/backend", sys({ container: true, mounts: ["/", "/data"] }));
+    assert.equal(viaEnv.persistent, true);
+    assert.equal(viaEnv.insideApp, false);
+  });
+  test("on a plain server the data folder is kept, with a caution when it is inside the app folder", () => {
+    const s = checkStorage("/srv/kibo/backend/data", "/srv/kibo/backend", sys({ container: false, mounts: ["/"] }));
+    assert.equal(s.persistent, true);
+    assert.equal(s.insideApp, true);
+  });
+  test("super admins see where content is stored on the dashboard", async () => {
+    const t = await login(ADMIN.email, ADMIN.password);
+    const d = await call("/api/admin/dashboard", { token: t });
+    assert.equal(d.status, 200);
+    assert.equal(typeof d.body.storage.persistent, "boolean");
+    assert.ok(d.body.storage.dataDir);
+  });
+});
+
 describe("security hardening", () => {
   let superT;
   // creates a user, replaces the temporary password and returns a token

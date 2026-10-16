@@ -154,6 +154,39 @@ balancer) and don't expose its port directly to the internet.
 Image optimisation (WebP + responsive sizes, EXIF/GPS removal) uses `sharp`
 (installed with `npm install` in `backend/`). Without it uploads still work, unoptimised.
 
+## Keep content when deploying (important)
+
+Everything saved in Super Admin lives in **one folder**, `DATA_DIR` (default
+`backend/data`). The code in the repository only holds the built-in default
+content. That folder contains:
+
+- drafts, published pages and revisions;
+- SEO settings, header/footer scripts and forms;
+- uploaded images, leads, chats and admin accounts.
+
+If a deploy starts the backend with an empty data folder, the website goes back
+to its default content, all drafts disappear, and the Super Admin password
+changes (a new temporary one is printed in the server log).
+
+- **Hosting panel / containers** (Coolify, Dokploy, CapRover, Easypanel, plain
+  Docker): every deploy creates a new container. Add **persistent storage (a
+  volume)** to the backend app:
+  - either mount it at the data folder (e.g. `/app/backend/data`);
+  - or mount it anywhere (e.g. `/data`) and set `DATA_DIR=/data`.
+
+  Then redeploy once.
+- **VPS with `git pull` + pm2/systemd:** `git pull` keeps `backend/data`, because
+  it isn't in git. Never delete or re-upload the whole folder. Safer: move the
+  data to a folder outside the app, e.g. `/var/lib/kibo360`, and set
+  `DATA_DIR` to it.
+
+The backend checks this at every start. If the data folder is inside a container
+without a volume, the log prints a large warning, and the Super Admin dashboard
+shows "Your content will be erased on the next deploy" to people who manage the
+team.
+
+Before changing anything on the server, make a copy of the data folder.
+
 ## Rolling out (staging first)
 
 1. Copy the production `backend/data` to the staging server (it contains leads -

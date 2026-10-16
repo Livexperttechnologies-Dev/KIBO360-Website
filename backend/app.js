@@ -13,6 +13,7 @@ import { createForms, defaultForms } from "./lib/forms.js";
 import { createChat } from "./lib/chat.js";
 import { createSeoTools } from "./lib/seoTools.js";
 import { apiSecurityHeaders } from "./lib/security.js";
+import { checkStorage, reportStorage } from "./lib/storageCheck.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,9 @@ export async function createApp({
   origins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
 } = {}) {
   const store = createStore(dataDir);
+  // will the content survive the next deploy? (reported loudly if not)
+  const storage = checkStorage(dataDir, __dirname);
+  if (process.env.NODE_ENV !== "test") reportStorage(storage);
   const audit = createAudit({ store });
   const auth = createAuth({ store, audit });
   const { requireAuth, can } = auth;
@@ -99,6 +103,8 @@ export async function createApp({
       version: pub.version || 0,
       lastPublishedAt: pub.updatedAt,
       siteServer: !!site,
+      // where content is stored - and whether it survives a deploy (super admins only)
+      storage: can(req, "users.manage") ? { persistent: storage.persistent, insideApp: storage.insideApp, inContainer: storage.inContainer, dataDir: storage.dataDir } : null,
       // static hosting: are the website files kept current? (STATIC_SITE_DIR)
       staticSite: staticSite ? { ...staticSite.status } : null,
       content: {
