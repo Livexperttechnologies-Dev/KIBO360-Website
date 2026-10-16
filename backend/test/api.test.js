@@ -1008,14 +1008,140 @@ describe("static website files follow publishes (static hosting)", () => {
 });
 
 describe("content storage survives deploys", () => {
-  const sys = ({ container, mounts }) => ({
+  // mounts: "/point" or "/point:fstype"; `files` are mounted files, not folders;
+  // `present` are files that exist (e.g. a database's PG_VERSION)
+  const sys = ({ container, mounts, files = [], readOnly = [], present = [] }) => ({
     platform: "linux",
-    exists: (f) => container && f === "/.dockerenv",
-    read: (f) => (f === "/proc/self/mountinfo" ? mounts.map((m, i) => `${i} 1 0:1 / ${m} rw - overlay x rw`).join("\n") : ""),
+    exists: (f) => (container && f === "/.dockerenv") || present.includes(f),
+    read: (f) => (f === "/proc/self/mountinfo" ? mounts.map((m, i) => { const [p, t = "ext4"] = m.split(":"); return `${i} 1 0:1 / ${p} rw - ${t} x rw`; }).join("\n") : ""),
     realpath: (p) => p,
+    isDir: (p) => !files.includes(p),
+    writable: (p) => !readOnly.includes(p),
   });
-  let checkStorage;
-  before(async () => { ({ checkStorage } = await import("../lib/storageCheck.js")); });
+  // what a Dokploy/Docker container always has mounted
+  const BASE = ["/:overlay", "/proc:proc", "/dev:tmpfs", "/dev/shm:tmpfs", "/sys:sysfs", "/etc/hosts", "/etc/hostname", "/etc/resolv.conf", "/run/secrets:tmpfs"];
+  let checkStorage, chooseDataDir, storageMod;
+  before(async () => { storageMod = await import("../lib/storageCheck.js"); ({ checkStorage, chooseDataDir } = storageMod); });
+  const choose = (opts, envDir) => chooseDataDir({ envDir, defaultDir: "/app/data", appDir: "/app", sys: sys({ container: true, ...opts }) });
+
+  test("without DATA_DIR, a volume added in the hosting panel is used automatically", () => {
+    assert.deepEqual(choose({ mounts: [...BASE, "/data"] }), { dir: "/data", from: "volume" });
+    // mounted somewhere else - the only volume there is
+    assert.deepEqual(choose({ mounts: [...BASE, "/kibo-content"] }), { dir: "/kibo-content", from: "volume" });
+    // the usual name wins over other volumes
+    assert.equal(choose({ mounts: [...BASE, "/backups", "/data"] }).dir, "/data");
+  });
+  test("the data folder already on a volume, or DATA_DIR set, is kept as it is", () => {
+    assert.deepEqual(choose({ mounts: [...BASE, "/app/data", "/data"] }), { dir: "/app/data", from: "default" });
+    assert.deepEqual(choose({ mounts: [...BASE, "/data"] }, "/srv/content"), { dir: "/srv/content", from: "DATA_DIR" });
+    // a plain server (no container) keeps backend/data
+    assert.deepEqual(chooseDataDir({ defaultDir: "/srv/kibo/data", appDir: "/srv/kibo", sys: sys({ container: false, mounts: ["/", "/data"] }) }), { dir: "/srv/kibo/data", from: "default" });
+  });
+  test("no usable volume: stays in the container (and is reported), never guesses between several", () => {
+    assert.deepEqual(choose({ mounts: BASE }), { dir: "/app/data", from: "default", volumes: [], skipped: [] });
+    // mounted files, read-only and in-memory mounts are not volumes
+    const odd = choose({ mounts: [...BASE, "/app/config.json", "/certs", "/scratch:tmpfs"], files: ["/app/config.json"], readOnly: ["/certs"] });
+    assert.deepEqual(odd.volumes, []);
+    assert.deepEqual(odd.skipped, [{ point: "/certs", why: "not writable" }]);
+    const two = choose({ mounts: [...BASE, "/vol-a", "/vol-b"] });
+    assert.equal(two.dir, "/app/data");
+    assert.deepEqual(two.volumes, ["/vol-a", "/vol-b"]);
+  });
+  test("a database's volume (e.g. Dokploy PostgreSQL) is never used for content", () => {
+    // the PostgreSQL 18 data volume mounted at its usual path
+    const pg = choose({ mounts: [...BASE, "/var/lib/postgresql/18/docker"] });
+    assert.equal(pg.dir, "/app/data");
+    assert.deepEqual(pg.skipped, [{ point: "/var/lib/postgresql/18/docker", why: "a database's own data folder" }]);
+    // the same volume attached at /data - recognised by its files
+    const shared = choose({ mounts: [...BASE, "/data"], present: ["/data/PG_VERSION"] });
+    assert.equal(shared.dir, "/app/data");
+    assert.equal(shared.skipped[0].point, "/data");
+    // MongoDB / MySQL / Redis volumes too; a real volume next to them is still found
+    assert.equal(choose({ mounts: [...BASE, "/data/db", "/var/lib/mysql", "/redis"], present: ["/redis/dump.rdb"] }).volumes.length, 0);
+    assert.deepEqual(choose({ mounts: [...BASE, "/var/lib/postgresql/data", "/kibo"] }), { dir: "/kibo", from: "volume" });
+    // DATA_DIR pointed at one is kept (explicit) but flagged
+    const s = checkStorage("/var/lib/postgresql/18/docker", "/app", sys({ container: true, mounts: [...BASE, "/var/lib/postgresql/18/docker"] }));
+    assert.equal(s.persistent, true);
+    assert.equal(s.database, true);
+    assert.equal(checkStorage("/data", "/app", sys({ container: true, mounts: [...BASE, "/data"] })).database, false);
+  });
+  test("reads a real container's mount list (Docker named volume at /data)", () => {
+    const mountinfo = [
+      "1405 1270 0:208 / / rw,relatime master:466 - overlay overlay rw,lowerdir=/var/lib/docker/overlay2/l/A:/var/lib/docker/overlay2/l/B",
+      "1406 1405 0:211 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw",
+      "1407 1405 0:212 / /dev rw,nosuid - tmpfs tmpfs rw,size=65536k,mode=755",
+      "1408 1407 0:213 / /dev/pts rw,nosuid,noexec,relatime - devpts devpts rw,gid=5,mode=620,ptmxmode=666",
+      "1409 1405 0:214 / /sys ro,nosuid,nodev,noexec,relatime - sysfs sysfs ro",
+      "1410 1409 0:30 / /sys/fs/cgroup ro,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw",
+      "1411 1407 0:210 / /dev/mqueue rw,nosuid,nodev,noexec,relatime - mqueue mqueue rw",
+      "1412 1407 0:215 / /dev/shm rw,nosuid,nodev,noexec,relatime - tmpfs shm rw,size=65536k",
+      "1413 1405 8:1 /var/lib/docker/volumes/kibo360-data/_data /data rw,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro",
+      "1414 1405 8:1 /var/lib/docker/containers/abc/resolv.conf /etc/resolv.conf rw,relatime - ext4 /dev/sda1 rw",
+      "1415 1405 8:1 /var/lib/docker/containers/abc/hostname /etc/hostname rw,relatime - ext4 /dev/sda1 rw",
+      "1416 1405 8:1 /var/lib/docker/containers/abc/hosts /etc/hosts rw,relatime - ext4 /dev/sda1 rw",
+      "1271 1407 0:213 /0 /dev/console rw,nosuid,noexec,relatime - devpts devpts rw,gid=5,mode=620,ptmxmode=666",
+      "1290 1406 0:216 / /proc/acpi ro,relatime - tmpfs tmpfs ro",
+      "1291 1409 0:217 / /sys/firmware ro,relatime - tmpfs tmpfs ro",
+    ].join("\n");
+    const real = (withVolume) => ({
+      platform: "linux", exists: (f) => f === "/.dockerenv", realpath: (p) => p, isDir: () => true, writable: () => true,
+      read: (f) => (f === "/proc/self/mountinfo" ? (withVolume ? mountinfo : mountinfo.split("\n").filter((l) => !l.includes(" /data ")).join("\n")) : ""),
+    });
+    assert.deepEqual(chooseDataDir({ defaultDir: "/app/data", appDir: "/app", sys: real(true) }), { dir: "/data", from: "volume" });
+    assert.equal(checkStorage("/data", "/app", real(true)).persistent, true);
+    assert.equal(checkStorage("/data", "/app", real(true)).mount, "/data");
+    // the same container without the volume: nothing to use, reported as temporary
+    assert.deepEqual(chooseDataDir({ defaultDir: "/app/data", appDir: "/app", sys: real(false) }), { dir: "/app/data", from: "default", volumes: [], skipped: [] });
+    assert.equal(checkStorage("/app/data", "/app", real(false)).persistent, false);
+  });
+  test("anyone can check from outside whether content survives a deploy", async () => {
+    const h = await call("/api/health");
+    assert.equal(h.status, 200);
+    // the same answer as checking the test's data folder directly
+    const backendDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+    assert.equal(h.body.storage, checkStorage(dataDir, backendDir).persistent ? "persistent" : "temporary");
+    assert.equal(h.body.storageWarning, undefined);
+    const d = await call("/api/admin/dashboard", { token: await login(ADMIN.email, ADMIN.password) });
+    assert.equal(h.body.storage === "persistent", d.body.storage.persistent);
+    assert.equal(d.body.storage.database, false);
+  });
+  test("the fix advice matches the setup (DATA_DIR set or not)", () => {
+    const { storageFix, reportStorage } = storageMod;
+    const temp = checkStorage("/srv/content", "/app", sys({ container: true, mounts: BASE }));
+    // DATA_DIR wins over volumes, so a volume at /data would not help
+    assert.match(storageFix(temp, { from: "DATA_DIR" }), /DATA_DIR is \/srv\/content: mount the backend's volume at exactly that path/);
+    assert.doesNotMatch(storageFix(temp, { from: "DATA_DIR" }), /mount path \/data/);
+    assert.match(storageFix(temp, { from: "default", volumes: [], skipped: [] }), /a new volume name, mount path \/data/);
+    assert.match(storageFix(temp, { from: "default", volumes: ["/a", "/b"] }), /Several volumes are mounted \(\/a, \/b\)/);
+    const lines = [];
+    const log = { log: (m) => lines.push(["log", m]), warn: (m) => lines.push(["warn", m]) };
+    reportStorage(temp, log, { from: "default", volumes: [], skipped: [{ point: "/var/lib/postgresql/18/docker", why: "a database's own data folder" }] });
+    assert.equal(lines[0][0], "warn");
+    assert.match(lines[0][1], /WILL BE ERASED/);
+    assert.match(lines[0][1], /Not used: the volume at \/var\/lib\/postgresql\/18\/docker \(a database's own data folder\)/);
+    lines.length = 0;
+    reportStorage(checkStorage("/data", "/app", sys({ container: true, mounts: [...BASE, "/data"], present: ["/data/PG_VERSION"] })), log, { from: "DATA_DIR" });
+    assert.equal(lines[0][0], "warn");
+    assert.match(lines[0][1], /also a database's own data folder/);
+  });
+  test("a data folder inside a database's volume is kept, but flagged in /api/health and on the dashboard", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kibo360-pgvol-"));
+    fs.writeFileSync(path.join(dir, "PG_VERSION"), "18\n");
+    const { hashPassword } = await import("../lib/security.js");
+    fs.writeFileSync(path.join(dir, "users.json"), JSON.stringify([{ id: "u_pg", email: ADMIN.email, name: "Owner", roleId: "superadmin", extraPermissions: [], passwordHash: hashPassword("PgVolumeOwner123"), active: true }]));
+    const made = await createApp({ dataDir: dir });
+    const server = await new Promise((res) => { const s = made.app.listen(0, () => res(s)); });
+    const url = `http://localhost:${server.address().port}`;
+    try {
+      const h = await (await fetch(`${url}/api/health`)).json();
+      assert.equal(h.storage, "persistent");
+      assert.equal(h.storageWarning, "database-volume");
+      const { token } = await (await fetch(`${url}/api/admin/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: ADMIN.email, password: "PgVolumeOwner123" }) })).json();
+      const d = await (await fetch(`${url}/api/admin/dashboard`, { headers: { Authorization: `Bearer ${token}` } })).json();
+      assert.equal(d.storage.database, true);
+      assert.equal(typeof d.storage.fix, "string");
+    } finally { server.close(); made.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  });
 
   test("data inside a container without a volume is reported as erased on the next deploy", () => {
     const s = checkStorage("/app/backend/data", "/app/backend", sys({ container: true, mounts: ["/", "/proc", "/etc/hosts"] }));

@@ -136,7 +136,7 @@ cd ../backend && SITE_DIST=../frontend/dist PORT=5001 node server.js
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `5001` | listen port |
-| `DATA_DIR` | `backend/data` | JSON stores, uploads, drafts, revisions, audit log. **Back this up.** |
+| `DATA_DIR` | `backend/data` (in a container without a volume there: the mounted volume, e.g. `/data`) | JSON stores, uploads, drafts, revisions, audit log. **Back this up.** |
 | `SITE_DIST` | unset | path to `frontend/dist` to also serve the website (SSR mode) |
 | `SERVE_SITE=1` | unset | shortcut: serve `../frontend/dist` if it exists |
 | `STATIC_SITE_DIR` | unset | static hosting: folder your web server serves - rewritten after every publish so page source / link previews are current (see above) |
@@ -171,10 +171,14 @@ changes (a new temporary one is printed in the server log).
 - **Hosting panel / containers** (Coolify, Dokploy, CapRover, Easypanel, plain
   Docker): every deploy creates a new container. Add **persistent storage (a
   volume)** to the backend app:
-  - either mount it at the data folder (e.g. `/app/backend/data`);
-  - or mount it anywhere (e.g. `/data`) and set `DATA_DIR=/data`.
+  - mount it at `/data` (nothing else needed: when `DATA_DIR` is not set and the
+    default folder is not on a volume, the backend uses the mounted volume);
+  - or mount it anywhere and set `DATA_DIR` to that path.
 
-  Then redeploy once.
+  Then redeploy once. Check at `https://<api domain>/api/health`: it must show
+  `"storage":"persistent"`. `"temporary"` means content is still erased on every
+  deploy. A `storageWarning` means the data sits in another service's volume
+  (e.g. a database's).
 - **VPS with `git pull` + pm2/systemd:** `git pull` keeps `backend/data`, because
   it isn't in git. Never delete or re-upload the whole folder. Safer: move the
   data to a folder outside the app, e.g. `/var/lib/kibo360`, and set
@@ -184,17 +188,41 @@ changes (a new temporary one is printed in the server log).
 
 Backend app:
 
-1. **Advanced → Volumes/Mounts → Volume Mount**:
-   - Volume Name `kibo360-data`
+1. Open the **backend** app (the one serving `api.kibo360.in`, not the website
+   app). **Advanced → Volumes → Add Volume → Volume Mount**:
+   - Volume Name `kibo360-data` (a NEW name)
    - Mount Path `/data`
-2. **Environment**:
-   - `DATA_DIR=/data`
+
+   Create.
+
+   A database service in the project (e.g. PostgreSQL, whose volume is mounted
+   at `/var/lib/postgresql/18/docker`) has a volume of its own. That volume only
+   keeps the database: the backend does not use PostgreSQL, so it needs this
+   separate volume. Never attach a database's volume to the backend. Without
+   `DATA_DIR`, the backend skips a volume that holds database files; if
+   `DATA_DIR` (or the default data folder) is on one, the backend still uses it
+   but warns in the log, on the dashboard and in `/api/health`
+   (`"storageWarning":"database-volume"`).
+2. Optional, **Environment**:
+   - `DATA_DIR=/data` (the backend finds the volume without it; if you set it,
+     it must equal the Mount Path exactly);
    - `KIBO_ADMIN_PASSWORD=<a strong temporary password>` - used only while the
      data folder is still empty; it must be changed at first sign-in.
 
    Save.
-3. **Deploy.** From now on pushes keep all content and the password. The log
-   shows `[storage] content is stored in /data (persistent volume at /data)`.
+3. **Deploy** (a volume only takes effect after a deploy). Check
+   `https://api.kibo360.in/api/health` → `"storage":"persistent"`. The log shows
+   `[storage] content is stored in /data (persistent volume at /data)`.
+
+   From now on pushes keep all content and the password. The first deploy with
+   the volume starts from an empty folder. Content from before the previous
+   deploy is already gone, but anything entered since then (drafts, published
+   changes, leads, uploads) is still in the running container and is lost by
+   this deploy. To keep it, copy the old data folder out first (on the Dokploy
+   server: `docker cp <backend container>:/app/data ./kibo-backup` - the
+   folder is the one in the `[storage]` log line), and after the deploy copy it
+   into the volume (`docker cp ./kibo-backup/. <new container>:/data`) and
+   redeploy. Otherwise enter that content once more.
 
 Website app (static, served by Caddy):
 

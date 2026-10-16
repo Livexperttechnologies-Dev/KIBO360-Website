@@ -17,7 +17,8 @@
 //       --password <pw>   use this instead of a generated one (avoid: it ends
 //                  up in shell history and npm logs).
 //
-// Uses DATA_DIR when set, otherwise backend/data.
+// Uses DATA_DIR when set, otherwise backend/data - or, in a container where
+// that folder is not on a volume, the mounted volume (same rule as the server).
 // ---------------------------------------------------------------------------
 
 import fs from "fs";
@@ -27,13 +28,17 @@ import { fileURLToPath } from "url";
 import { createStore } from "../lib/store.js";
 import { hashPassword, verifyPassword, passwordProblem, newId } from "../lib/security.js";
 import { SUPER_ADMIN_EMAIL } from "../lib/auth.js";
+import { chooseDataDir } from "../lib/storageCheck.js";
 
 const OLD_DEFAULT_PASSWORD = "Kibo360@Admin"; // published in the old server's source
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.resolve(process.env.DATA_DIR || path.join(here, "..", "data"));
+const appDir = path.join(here, "..");
+// the same folder the server picks (DATA_DIR, backend/data, or a mounted volume)
+const chosen = chooseDataDir({ envDir: process.env.DATA_DIR, defaultDir: path.join(appDir, "data"), appDir });
+const dataDir = path.resolve(chosen.dir);
 const [cmd, ...rest] = process.argv.slice(2);
-const where = `Data folder: ${dataDir}${process.env.DATA_DIR ? " (from DATA_DIR)" : " (default - if the server runs with DATA_DIR, set the same value here)"}`;
+const where = `Data folder: ${dataDir}${chosen.from === "DATA_DIR" ? " (from DATA_DIR)" : chosen.from === "volume" ? " (the mounted volume)" : " (default - if the server runs with DATA_DIR, set the same value here)"}`;
 
 function usage(code = 0) {
   console.log(`Usage:

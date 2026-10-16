@@ -5,7 +5,9 @@ import { createApp } from "./app.js";
 
 // KIBO360 backend entry point.
 //   PORT          listen port (default 5001)
-//   DATA_DIR      where JSON stores + uploads live (default ./data)
+//   DATA_DIR      where JSON stores + uploads live (default ./data; in a
+//                 container where ./data is not on a volume, a mounted volume
+//                 such as /data is used automatically)
 //   SITE_DIST     path to the built frontend (frontend/dist). When set and the
 //                 SSR bundle exists, this server ALSO serves the public website
 //                 with server-side rendering, real 301 redirects and a live

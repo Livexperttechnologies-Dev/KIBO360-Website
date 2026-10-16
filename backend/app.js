@@ -13,7 +13,7 @@ import { createForms, defaultForms } from "./lib/forms.js";
 import { createChat } from "./lib/chat.js";
 import { createSeoTools } from "./lib/seoTools.js";
 import { apiSecurityHeaders } from "./lib/security.js";
-import { checkStorage, reportStorage } from "./lib/storageCheck.js";
+import { checkStorage, reportStorage, chooseDataDir, storageFix } from "./lib/storageCheck.js";
 import { deployHookFromEnv } from "./lib/deployHook.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,15 +24,17 @@ const DEFAULT_ORIGINS = [
 ];
 
 export async function createApp({
-  dataDir = process.env.DATA_DIR || path.join(__dirname, "data"),
+  dataDir = null, // default: DATA_DIR, else backend/data, else a mounted volume (see chooseDataDir)
   siteDist = process.env.SITE_DIST || null,
   staticSiteDir = process.env.STATIC_SITE_DIR || null,
   origins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
 } = {}) {
+  const chosen = dataDir ? { dir: dataDir, from: "option" } : chooseDataDir({ envDir: process.env.DATA_DIR, defaultDir: path.join(__dirname, "data"), appDir: __dirname });
+  dataDir = chosen.dir;
   const store = createStore(dataDir);
   // will the content survive the next deploy? (reported loudly if not)
   const storage = checkStorage(dataDir, __dirname);
-  if (process.env.NODE_ENV !== "test") reportStorage(storage);
+  if (process.env.NODE_ENV !== "test") reportStorage(storage, console, chosen);
   const audit = createAudit({ store });
   const auth = createAuth({ store, audit });
   const { requireAuth, can } = auth;
@@ -73,7 +75,11 @@ export async function createApp({
   app.use("/api", express.json({ limit: "100kb" }));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, service: "kibo360-backend", time: new Date().toISOString(), contentVersion: content.loadPublished().version || 0 });
+    res.json({ ok: true, service: "kibo360-backend", time: new Date().toISOString(), contentVersion: content.loadPublished().version || 0,
+      // "temporary" = content is erased by the next deploy (no volume)
+      storage: storage.persistent ? "persistent" : "temporary",
+      // kept, but inside a database's own volume - the backend needs its own
+      ...(storage.database ? { storageWarning: "database-volume" } : {}) });
   });
 
   auth.registerRoutes(app);
@@ -106,7 +112,7 @@ export async function createApp({
       lastPublishedAt: pub.updatedAt,
       siteServer: !!site,
       // where content is stored - and whether it survives a deploy (super admins only)
-      storage: can(req, "users.manage") ? { persistent: storage.persistent, insideApp: storage.insideApp, inContainer: storage.inContainer, dataDir: storage.dataDir } : null,
+      storage: can(req, "users.manage") ? { persistent: storage.persistent, insideApp: storage.insideApp, inContainer: storage.inContainer, dataDir: storage.dataDir, database: storage.database, fix: storageFix(storage, chosen) } : null,
       // static hosting: are the website files kept current? (STATIC_SITE_DIR)
       staticSite: staticSite ? { ...staticSite.status } : null,
       deployHook: deployHook ? { ...deployHook.status } : null,
