@@ -25,6 +25,7 @@ const certs = [
 // Page copy comes verbatim from "About Us Page- Kibo360.docx"
 export default function About() {
   const company = useCompany();
+  
   return (
     <PageDoc id="about">
       <Seo page="about" jsonLd={aboutJsonLd} />
