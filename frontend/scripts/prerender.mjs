@@ -1,12 +1,14 @@
 // Build-time prerendering (static hosting mode).
 // Renders every public page to real HTML with the PUBLISHED CMS content, and
-// generates robots.txt / sitemap.xml / llms.txt / redirect stubs from the
-// CMS too. Runs after `vite build` + `vite build --ssr` (see package.json).
+// generates robots.txt / sitemap.xml / llms.txt / redirect pages from the CMS
+// too. Runs after `vite build` + `vite build --ssr` (see package.json).
 //
 //   CONTENT_API  where to read published content from at build time,
 //                e.g. https://api.kibo360.in  (unset -> code defaults only)
 //   MEDIA_BASE   origin that serves /uploads (defaults to CONTENT_API origin)
 //
+// The writing itself lives in src/staticSite.js (part of the SSR bundle) so the
+// backend can rewrite these files after every publish (STATIC_SITE_DIR).
 // The SSR bundle in dist-server/ is kept: the Node site server uses it to
 // render pages per request with live content (see backend/lib/site.js).
 import fs from "node:fs";
@@ -17,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(__dirname, "../dist");
 const distServer = path.resolve(__dirname, "../dist-server");
 
-const { render, buildSitemap, buildRobots, buildLlms, siteEntries, effectiveRedirects, mergedSeo } = await import(pathToFileURL(path.join(distServer, "entry-server.js")).href);
+const { writeStaticSite } = await import(pathToFileURL(path.join(distServer, "entry-server.js")).href);
 
 const CONTENT_API = (process.env.CONTENT_API || "").replace(/\/$/, "");
 const MEDIA_BASE = process.env.MEDIA_BASE ?? (CONTENT_API ? new URL(CONTENT_API).origin : "");
@@ -37,69 +39,19 @@ if (CONTENT_API) {
     console.warn(`content: could not reach ${CONTENT_API} (${e.message}) - building with code defaults; the live site will refresh itself at runtime`);
   }
 } else {
-  console.log("content: CONTENT_API not set - building with code defaults (published content loads at runtime)");
+  console.log("content: CONTENT_API not set - building with code defaults (published content loads at runtime; a backend with STATIC_SITE_DIR rewrites the files with it)");
 }
 
-const template = fs.readFileSync(path.join(dist, "index.html"), "utf8");
-for (const marker of ["<!--kibo-head-->", "<!--kibo-data-->", '<div id="root"></div>']) {
-  if (!template.includes(marker)) throw new Error(`dist/index.html is missing ${marker}`);
-}
-// The raw template is what the Node site server renders into.
-fs.writeFileSync(path.join(distServer, "template.html"), template, "utf8");
-
-// Replacer functions: "$&", "$'" etc. in CMS text must never be expanded.
-const inject = (r, route) =>
-  template
-    .replace("<!--kibo-head-->", () => r.head || "")
-    .replace('<div id="root"></div>', () => `<div id="root" data-prerendered-route="${route}">${r.html || ""}</div>`)
-    .replace("<!--kibo-data-->", () => `<script id="kibo-data" type="application/json">${r.data}</script>`);
-
-const fileFor = (route) => (route === "/" ? path.join(dist, "index.html") : path.join(dist, ...route.slice(1).split("/"), "index.html"));
-const write = (file, content) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content, "utf8"); };
-
-const pagePaths = new Set();
-for (const e of siteEntries(docs)) {
-  const r = await render(e.path, { docs, version, mediaBase: MEDIA_BASE });
-  if (r.redirect) { console.log(`skip        ${e.path} (redirects to ${r.redirect.to})`); continue; }
-  write(fileFor(e.path), inject(r, e.path));
-  pagePaths.add(e.path);
-  console.log(`prerendered ${e.path.padEnd(40)} ${(r.html.length / 1024).toFixed(1)} KB${r.status !== 200 ? ` (status ${r.status})` : ""}`);
+// The raw template (dist/index.html straight from vite) is kept in
+// dist-server/: the Node site server and the backend's file writer use it.
+const templateFile = path.join(distServer, "template.html");
+let template = fs.readFileSync(path.join(dist, "index.html"), "utf8");
+if (!template.includes("<!--kibo-head-->")) {
+  // dist/index.html was prerendered already (prerender run twice without a new vite build)
+  template = fs.readFileSync(templateFile, "utf8");
+} else {
+  fs.writeFileSync(templateFile, template, "utf8");
 }
 
-// Real 404 page (hosts that serve 404.html for unknown paths show it with a
-// 404 status). The client re-renders, so pages published later still resolve.
-const nf = await render("/__kibo-not-found__", { docs, version, mediaBase: MEDIA_BASE });
-write(path.join(dist, "404.html"), inject(nf, "/404"));
-// Plain SPA shell for hosts that rewrite unknown paths to 200.html.
-// It gets a neutral head (site name, default description, favicon) - no
-// canonical or robots tag, since it may stand in for any page.
-const g = mergedSeo(docs);
-const escA = (s) => String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-const shellHead = `<title>${escA(g.global.siteName || "KIBO360")}</title><meta name="description" content="${escA(g.global.defaultDescription)}" /><link rel="icon" href="/favicon.png" />`;
-write(path.join(dist, "200.html"), template.replace("<!--kibo-head-->", () => shellHead).replace("<!--kibo-data-->", () => `<script id="kibo-data" type="application/json">${nf.data}</script>`));
-
-// Redirect stubs (built-in legacy URLs + CMS redirects). A static host can't
-// send a 301, so these use an instant meta refresh + canonical; the Node
-// site server sends real 301s instead.
-for (const r of effectiveRedirects(docs)) {
-  if (r.type === 410 || !r.to || pagePaths.has(r.from) || r.from === "/") continue;
-  const to = r.to.replace(/"/g, "&quot;");
-  write(fileFor(r.from), `<!doctype html>
-<html lang="en"><head>
-<meta charset="UTF-8" />
-<title>Redirecting…</title>
-<meta name="robots" content="noindex" />
-<link rel="canonical" href="${to.startsWith("/") ? `https://kibo360.in${to}` : to}" />
-<script>(function(){var t=${JSON.stringify(r.to).replace(/</g, "\\u003c")};var i=t.indexOf("#");var b=i<0?t:t.slice(0,i);var f=i<0?"":t.slice(i);window.location.replace(b+(b.indexOf("?")<0?location.search:"")+(f||location.hash));})();</script>
-<noscript><meta http-equiv="refresh" content="0;url=${to}" /></noscript>
-</head><body><p>This page has moved to <a href="${to}">${to}</a>.</p></body></html>`);
-  console.log(`redirect    ${r.from.padEnd(40)} -> ${r.to}`);
-}
-
-const today = new Date().toISOString().slice(0, 10);
-write(path.join(dist, "sitemap.xml"), buildSitemap(docs, { lastmod: today }));
-write(path.join(dist, "robots.txt"), buildRobots(docs));
-const llms = buildLlms(docs);
-if (llms) write(path.join(dist, "llms.txt"), llms);
-if (g.indexNow?.enabled && g.indexNow.key) write(path.join(dist, `${g.indexNow.key}.txt`), g.indexNow.key);
-console.log("done - sitemap.xml, robots.txt, llms.txt written; dist/ contains real HTML for every public page");
+const res = await writeStaticSite({ outDir: dist, template, docs, version, mediaBase: MEDIA_BASE, manifestFile: path.join(dist, ".kibo-static-files.json"), log: (m) => console.log(m) });
+console.log(`done - ${res.pages} pages, ${res.redirects} redirect pages, sitemap.xml, robots.txt, llms.txt written to dist/`);

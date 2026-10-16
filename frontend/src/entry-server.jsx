@@ -5,6 +5,7 @@ import { ContentProvider } from "./cms/content.jsx";
 import { HeadCollectorContext } from "./components/Seo.jsx";
 import { renderHeadHtml, jsonForScript, buildSitemap, buildRobots, buildLlms, matchRedirect, siteEntries, effectiveRedirects, mergedSeo } from "./cms/seo.js";
 import { PAGES, BUILTIN_PATHS } from "./cms/pageMeta.js";
+import { writeStaticSite as writeSite } from "./staticSite.js";
 
 /**
  * Server-side render one URL with the given content.
@@ -39,5 +40,8 @@ export async function render(url, { docs = {}, version = 0, mediaBase = "", mode
   const data = jsonForScript(fresh ? { docs, version, mediaBase, fresh: true } : { docs, version, mediaBase });
   return { status: collector.status, html, head: collector.seo ? renderHeadHtml(collector.seo) : "", data, seo: collector.seo };
 }
+
+/** Write the whole static site (see staticSite.js) with this bundle's renderer. */
+export const writeStaticSite = (opts) => writeSite({ ...opts, render });
 
 export { buildSitemap, buildRobots, buildLlms, siteEntries, effectiveRedirects, mergedSeo, PAGES, BUILTIN_PATHS };

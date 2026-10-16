@@ -86,9 +86,36 @@ editor) makes a new page with the same design, sections and content:
 |---|---|---|
 | How | `npm run build` in `frontend/`, upload `frontend/dist/` | backend with `SITE_DIST` set serves the site |
 | Published text/images | visitors get them within seconds (the page checks `/api/content/version`) | server-rendered immediately |
-| Search engines / social previews | see new content after the next build | see it immediately |
+| Search engines / social previews / "view page source" | after the next build - or about a second after publishing with `STATIC_SITE_DIR` (below) | see it immediately |
 | Redirect manager | client-side redirects + stub pages | real 301/302/307/308/410 responses |
-| robots.txt / sitemap.xml / llms.txt | written at build time | always live |
+| robots.txt / sitemap.xml / llms.txt | written at build time - and after every publish with `STATIC_SITE_DIR` | always live |
+
+### Keep static files current after every publish (STATIC_SITE_DIR)
+
+With static hosting, the HTML files contain the content of the build. A new
+SEO title or description is applied in the browser after publishing, but
+"view page source", Facebook/LinkedIn/WhatsApp previews and other crawlers
+that don't run JavaScript keep reading the old file.
+
+If the backend runs on the same server as the website files (kibo360.in and
+api.kibo360.in share one server behind Caddy), let the backend rewrite them:
+
+- `STATIC_SITE=1` - the web server serves `frontend/dist` of this repository
+- or `STATIC_SITE_DIR=/path/the/web/server/serves` - plus
+  `STATIC_SITE_BUNDLE=/path/to/frontend/dist-server` if that folder is a copy
+  somewhere else
+
+The backend then rewrites every page's HTML, the redirect pages, sitemap.xml,
+robots.txt and llms.txt:
+
+- about a second after each publish (scheduled publishes too);
+- when it starts;
+- within 30 seconds of a new frontend build being deployed.
+
+Files of deleted or unpublished pages are removed. The user the backend runs
+as needs write access to that folder. If writing fails, the Super Admin
+dashboard shows an error. Images keep coming from
+`STATIC_MEDIA_BASE` (default `https://api.kibo360.in`).
 
 Static build that bakes in the published content:
 
@@ -112,6 +139,10 @@ cd ../backend && SITE_DIST=../frontend/dist PORT=5001 node server.js
 | `DATA_DIR` | `backend/data` | JSON stores, uploads, drafts, revisions, audit log. **Back this up.** |
 | `SITE_DIST` | unset | path to `frontend/dist` to also serve the website (SSR mode) |
 | `SERVE_SITE=1` | unset | shortcut: serve `../frontend/dist` if it exists |
+| `STATIC_SITE_DIR` | unset | static hosting: folder your web server serves - rewritten after every publish so page source / link previews are current (see above) |
+| `STATIC_SITE=1` | unset | shortcut: `STATIC_SITE_DIR=../frontend/dist` |
+| `STATIC_SITE_BUNDLE` | `<STATIC_SITE_DIR>/../dist-server` | the build's `dist-server` folder |
+| `STATIC_MEDIA_BASE` | `https://api.kibo360.in` | where uploaded images are served for those files |
 | `ALLOWED_ORIGINS` | – | extra CORS origins, comma separated (e.g. a staging domain) |
 | `SITE_FORM_ACTION` | – | Node site server only: extra `https://` origins (space separated) that forms on the site may post to, e.g. a newsletter form added under Header & footer scripts |
 | `KIBO_ADMIN_PASSWORD` | generated | fresh installs only: first Super Admin password. If unset, a random one is printed once in the server log. It must be changed at first sign-in (enforced by the API). |

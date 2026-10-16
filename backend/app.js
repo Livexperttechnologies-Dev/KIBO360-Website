@@ -24,6 +24,7 @@ const DEFAULT_ORIGINS = [
 export async function createApp({
   dataDir = process.env.DATA_DIR || path.join(__dirname, "data"),
   siteDist = process.env.SITE_DIST || null,
+  staticSiteDir = process.env.STATIC_SITE_DIR || null,
   origins = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
 } = {}) {
   const store = createStore(dataDir);
@@ -32,10 +33,11 @@ export async function createApp({
   const { requireAuth, can } = auth;
 
   let site = null; // SSR site server, attached below when a build is present
+  let staticSite = null; // static website files kept current (STATIC_SITE_DIR)
   const content = createContent({
     store, audit, requireAuth, can,
     validators: { defaultForms },
-    onPublish: (next, docIds) => site?.invalidate(next, docIds),
+    onPublish: (next, docIds) => { site?.invalidate(next, docIds); staticSite?.schedule(`publish v${next.version}`); },
     permissionsOf: auth.permissionsOf,
   });
   const settings = createSettings({ store, audit, requireAuth });
@@ -97,6 +99,8 @@ export async function createApp({
       version: pub.version || 0,
       lastPublishedAt: pub.updatedAt,
       siteServer: !!site,
+      // static hosting: are the website files kept current? (STATIC_SITE_DIR)
+      staticSite: staticSite ? { ...staticSite.status } : null,
       content: {
         publishedPages: pages.filter((p) => p.published).length,
         customPages: pages.filter((p) => p.docId.startsWith("page:c-")).length,
@@ -133,6 +137,12 @@ export async function createApp({
     if (site) site.mount(app);
   }
 
+  // ---- static website files rewritten after every publish (static hosting) ----
+  if (staticSiteDir) {
+    const { createStaticSite } = await import("./lib/staticSite.js");
+    staticSite = createStaticSite({ content, outDir: staticSiteDir, bundleDir: process.env.STATIC_SITE_BUNDLE || null, mediaBase: process.env.STATIC_MEDIA_BASE ?? "https://api.kibo360.in" });
+  }
+
   app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Not found" }));
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, _next) => {
@@ -142,6 +152,6 @@ export async function createApp({
     res.status(status).json({ ok: false, error: status >= 500 ? (err.code === "ECORRUPT" ? err.message : "Something went wrong on our side") : err.message });
   });
 
-  const close = () => { content.stop(); chat.stop(); };
-  return { app, services: { store, audit, auth, content, media, settings, forms, chat }, close, hasSite: !!site };
+  const close = () => { content.stop(); chat.stop(); staticSite?.close(); };
+  return { app, services: { store, audit, auth, content, media, settings, forms, chat, staticSite }, close, hasSite: !!site };
 }

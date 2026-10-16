@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth, useChatSummary } from "../AdminApp.jsx";
-import { Badge, Button, Card, Empty, ErrorBox, I, PageHead, Spinner, fmtBytes, timeAgo, useLoad } from "../ui.jsx";
+import { Alert, Badge, Button, Card, Empty, ErrorBox, I, PageHead, Spinner, fmtBytes, timeAgo, useLoad } from "../ui.jsx";
 import { docLabel } from "../editor/panels.jsx";
 import { PAGES } from "../../cms/pageMeta.js";
 
@@ -49,6 +49,9 @@ export default function Dashboard() {
           </>
         }
       />
+      {d.staticSite?.lastError && (
+        <Alert tone="error">The website files could not be updated after the last publish, so page source and link previews may still show old text: {d.staticSite.lastError}. Ask your developer to check the server (STATIC_SITE_DIR).</Alert>
+      )}
       <div className="a-stats">
         <Stat to="/admin/pages" icon="pages" label="Live pages" value={PAGES.length + (d.content.customPublished || 0)} sub={`${PAGES.length} main pages · ${d.content.customPublished || 0} landing page(s)`} />
         <Stat to="/admin/pages" icon="edit" label="Unpublished drafts" value={d.content.drafts.length} sub={d.content.drafts.length ? "waiting to go live" : "everything is live"} tone={d.content.drafts.length ? "var(--a-amber)" : undefined} />

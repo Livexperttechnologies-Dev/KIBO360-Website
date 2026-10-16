@@ -10,6 +10,11 @@ import { createApp } from "./app.js";
 //                 SSR bundle exists, this server ALSO serves the public website
 //                 with server-side rendering, real 301 redirects and a live
 //                 sitemap/robots.txt. Leave unset to run as API-only.
+//   STATIC_SITE_DIR  the folder a web server (Caddy, nginx...) serves the
+//                 website from. The backend rewrites its HTML, sitemap.xml and
+//                 robots.txt after every publish, so page source and link
+//                 previews always show what is live. STATIC_SITE=1 is a
+//                 shortcut for ../frontend/dist.
 //   ALLOWED_ORIGINS extra CORS origins (comma separated)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,9 +25,16 @@ if (!siteDist) {
   const guess = path.resolve(__dirname, "../frontend/dist");
   if (process.env.SERVE_SITE === "1" && fs.existsSync(guess)) siteDist = guess;
 }
+let staticSiteDir = process.env.STATIC_SITE_DIR || null;
+if (!staticSiteDir && process.env.STATIC_SITE === "1") {
+  const guess = path.resolve(__dirname, "../frontend/dist");
+  if (fs.existsSync(guess)) staticSiteDir = guess;
+  else console.warn(`[static] STATIC_SITE=1 but ${guess} does not exist - build the frontend first`);
+}
 
-const { app, hasSite } = await createApp({ siteDist });
+const { app, hasSite } = await createApp({ siteDist, staticSiteDir });
 
 app.listen(PORT, () => {
-  console.log(`KIBO360 backend running at http://localhost:${PORT}${hasSite ? " (serving the website with SSR)" : " (API only)"}`);
+  const mode = hasSite ? " (serving the website with SSR)" : staticSiteDir ? ` (API; keeping the website files in ${staticSiteDir} current)` : " (API only)";
+  console.log(`KIBO360 backend running at http://localhost:${PORT}${mode}`);
 });

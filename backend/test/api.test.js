@@ -954,6 +954,59 @@ describe("changing the address of main pages", () => {
   });
 });
 
+describe("static website files follow publishes (static hosting)", () => {
+  const bundleDir = fileURLToPath(new URL("../../frontend/dist-server", import.meta.url));
+  const hasBuild = fs.existsSync(path.join(bundleDir, "entry-server.js")) && fs.existsSync(path.join(bundleDir, "template.html"));
+  let superT, outDir, writer;
+  const publish = (docIds) => call("/api/admin/content/publish", { method: "POST", token: superT, body: { docIds } });
+  const html = (rel) => fs.readFileSync(path.join(outDir, rel), "utf8");
+
+  before(async () => {
+    if (!hasBuild) return;
+    superT = await login(ADMIN.email, ADMIN.password);
+    outDir = fs.mkdtempSync(path.join(os.tmpdir(), "kibo360-static-"));
+    const { createStaticSite } = await import("../lib/staticSite.js");
+    writer = createStaticSite({ content: svc.content, outDir, bundleDir, mediaBase: "", log: () => {} });
+  });
+  after(() => { writer?.close(); if (outDir) fs.rmSync(outDir, { recursive: true, force: true }); });
+
+  test("published SEO titles and descriptions are in the page HTML (view source)", { skip: !hasBuild && "no frontend build" }, async () => {
+    await call("/api/admin/content/doc/page:about", { method: "PATCH", token: superT, body: { seo: { title: "About - set in Super Admin", description: "Description published from Search appearance" } } });
+    assert.equal((await publish(["page:about"])).status, 200);
+    await writer.run("test");
+    assert.equal(writer.status.lastError, null);
+    const page = html("about/index.html");
+    assert.match(page, /<title>About - set in Super Admin[^<]*<\/title>/);
+    assert.match(page, /name="description" content="Description published from Search appearance"/);
+    assert.match(page, /"version":\d+/);
+    assert.ok(fs.existsSync(path.join(outDir, "sitemap.xml")) && fs.existsSync(path.join(outDir, "robots.txt")));
+    // back to the original texts
+    await call("/api/admin/content/doc/page:about", { method: "PATCH", token: superT, body: { seo: {} } });
+    assert.equal((await publish(["page:about"])).status, 200);
+  });
+
+  test("files of pages that are no longer published are removed", { skip: !hasBuild && "no frontend build" }, async () => {
+    const c = await call("/api/admin/content/pages", { method: "POST", token: superT, body: { label: "Static test", slug: "/landing/static-test" } });
+    assert.equal((await publish([c.body.docId])).status, 200);
+    await writer.run("test");
+    assert.ok(fs.existsSync(path.join(outDir, "landing/static-test/index.html")));
+    assert.equal((await call(`/api/admin/content/pages/${encodeURIComponent(c.body.docId)}`, { method: "DELETE", token: superT })).status, 200);
+    await writer.run("test");
+    assert.ok(!fs.existsSync(path.join(outDir, "landing/static-test/index.html")), "deleted page's file is gone");
+    assert.ok(!fs.existsSync(path.join(outDir, "landing/static-test")), "and its empty folder");
+    assert.ok(fs.existsSync(path.join(outDir, "index.html")), "other pages stay");
+  });
+
+  test("runs never overlap: publishing during a run writes once more afterwards", { skip: !hasBuild && "no frontend build" }, async () => {
+    const a = writer.run("first");
+    const b = writer.run("second (queued)");
+    assert.equal(a, b, "the second call joins the run in progress");
+    await a;
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(writer.status.lastError, null);
+  });
+});
+
 describe("security hardening", () => {
   let superT;
   // creates a user, replaces the temporary password and returns a token
