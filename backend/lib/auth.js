@@ -269,7 +269,7 @@ export function createAuth({ store, audit, sessionTtlMs = 12 * 60 * 60 * 1000 })
   // KIBO_ADMIN_RESET_PASSWORD=... on the next start sets that as the Super
   // Admin's TEMPORARY password (must be changed at sign-in). Applied once per
   // value: the fingerprint is kept both in admin-reset.json and on the user
-  // record, so a restart (or a lost marker file) does not reset it again.
+  // record, so a restart (or a lost marker file) does not reset it again...
   (function startupAccountChecks() {
     if (process.env.KIBO_ADMIN_PASSWORD && hadUsers) {
       console.log("[auth] KIBO_ADMIN_PASSWORD only applies to a brand-new data folder - to reset a password run: npm run admin -- reset-password");
